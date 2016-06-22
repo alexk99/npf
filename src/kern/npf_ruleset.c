@@ -547,13 +547,6 @@ npf_ruleset_reload(npf_t *npf, npf_ruleset_t *newset,
 			continue;
 		}
 
-		/*
-		 * First, try to share the active port map.  If this
-		 * policy will be unused, npf_nat_freepolicy() will
-		 * drop the reference.
-		 */
-		npf_ruleset_sharepm(oldset, np);
-
 		/* Does it match with any policy in the active ruleset? */
 		LIST_FOREACH(actrl, &oldset->rs_all, r_aentry) {
 			if (!actrl->r_natp)
@@ -584,32 +577,6 @@ npf_ruleset_reload(npf_t *npf, npf_ruleset_t *newset,
 
 	/* Inherit the ID counter. */
 	newset->rs_idcnt = oldset->rs_idcnt;
-}
-
-/*
- * npf_ruleset_sharepm: attempt to share the active NAT portmap.
- */
-npf_rule_t *
-npf_ruleset_sharepm(npf_ruleset_t *rlset, npf_natpolicy_t *mnp)
-{
-	npf_natpolicy_t *np;
-	npf_rule_t *rl;
-
-	/*
-	 * Scan the NAT policies in the ruleset and match with the
-	 * given policy based on the translation IP address.  If they
-	 * match - adjust the given NAT policy to use the active NAT
-	 * portmap.  In such case the reference on the old portmap is
-	 * dropped and acquired on the active one.
-	 */
-	LIST_FOREACH(rl, &rlset->rs_all, r_aentry) {
-		np = rl->r_natp;
-		if (np == NULL || np == mnp)
-			continue;
-		if (npf_nat_sharepm(np, mnp))
-			break;
-	}
-	return rl;
 }
 
 npf_natpolicy_t *
@@ -850,6 +817,8 @@ static inline bool
 npf_rule_inspect(const npf_rule_t *rl, bpf_args_t *bc_args,
     const int di_mask, const u_int ifid)
 {
+	dprintf2("rule inspect: rule if %d, pkt if %d\n", rl->r_ifid, ifid);
+
 	/* Match the interface. */
 	if (rl->r_ifid && rl->r_ifid != ifid) {
 		return false;

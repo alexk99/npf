@@ -79,6 +79,11 @@ typedef uint8_t			npf_netmask_t;
 /* The number of words used. */
 #define	NPF_BPF_NWORDS		3
 
+/**/
+#define NPF_CONN_MAP_IPV4_SIZE 1048576 * 4
+/**/
+#define NPF_CONN_MAP_IPV6_SIZE 512 * 4
+
 /*
  * In-kernel declarations and definitions.
  */
@@ -109,6 +114,8 @@ struct nbuf;
 typedef struct nbuf nbuf_t;
 
 void		nbuf_init(npf_t *, nbuf_t *, struct mbuf *, const ifnet_t *);
+void		nbuf_init2(npf_t *, nbuf_t *, struct mbuf *, size_t, const ifnet_t *);
+
 void		nbuf_reset(nbuf_t *);
 struct mbuf *	nbuf_head_mbuf(nbuf_t *);
 
@@ -119,6 +126,7 @@ void *		nbuf_dataptr(nbuf_t *);
 size_t		nbuf_offset(const nbuf_t *);
 void *		nbuf_advance(nbuf_t *, size_t, size_t);
 
+int nbuf_check_ip_hdr_size(nbuf_t *);
 void *		nbuf_ensure_contig(nbuf_t *, size_t);
 void *		nbuf_ensure_writable(nbuf_t *, size_t);
 
@@ -250,8 +258,9 @@ bool		npf_autounload_p(void);
 #define	NPF_NATOUT			2
 
 #define	NPF_NAT_PORTS			0x01
-#define	NPF_NAT_PORTMAP			0x02
+#define	NPF_NAT_PORTMAP		0x02
 #define	NPF_NAT_STATIC			0x04
+#define	NPF_NAT_NETMAP			0x08
 
 #define	NPF_ALGO_NPT66			1
 

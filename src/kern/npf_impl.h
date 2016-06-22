@@ -60,6 +60,8 @@
 
 #include "npf.h"
 #include "npfkern.h"
+#include "npf_portmap.h"
+#include "npf_debug.h"
 
 #ifdef _NPF_DEBUG
 #define	NPF_PRINTF(x)	printf x
@@ -85,6 +87,8 @@ typedef struct npf_rprocset	npf_rprocset_t;
 typedef struct npf_alg		npf_alg_t;
 typedef struct npf_natpolicy	npf_natpolicy_t;
 typedef struct npf_conn		npf_conn_t;
+typedef struct npf_conn_ipv4 npf_conn_ipv4_t;
+typedef struct npf_conn_ipv6 npf_conn_ipv6_t;
 typedef struct npf_config	npf_config_t;
 
 struct npf_conndb;
@@ -103,6 +107,8 @@ typedef struct npf_algset	npf_algset_t;
  */
 
 typedef void (*npf_workfunc_t)(npf_t *);
+
+#define NPF_PORTMAP_HASH_SIZE 512
 
 /*
  * Some artificial limits.
@@ -156,11 +162,22 @@ struct nbuf {
 	unsigned	nb_ifid;
 	int		nb_flags;
 	const npf_mbufops_t *nb_mops;
+	size_t l2_hdr_size;
 };
 
 /*
  * NPF INSTANCE (CONTEXT) STRUCTURE AND AUXILIARY OPERATIONS.
  */
+
+typedef struct {
+	char msg[60];
+}
+log_entry_t;
+
+typedef int (*npf_log_func_t)(char *format, ...);
+npf_log_func_t g_log_func;
+
+#define npf_log g_log_func
 
 struct npf {
 	/* Active NPF configuration. */
@@ -168,6 +185,8 @@ struct npf {
 	pserialize_t		qsbr;
 	npf_config_t *		config;
 
+	__time_t				sec;
+	
 	/* BPF byte-code context. */
 	bpf_ctx_t *		bpfctx;
 	const npf_mbufops_t *	mbufops;
@@ -177,13 +196,19 @@ struct npf {
 	 * Connection tracking database, connection cache and the lock.
 	 */
 	volatile int		conn_tracking;
-	kmutex_t		conn_lock;
+	npf_lock_t		conn_lock;
+
+	
 	npf_conndb_t *		conn_db;
-	pool_cache_t		conn_cache;
+	pool_cache_t		conn_ipv4_cache;
+	pool_cache_t		conn_ipv6_cache;
 
 	/* ALGs. */
 	npf_algset_t *		algset;
 
+	/* nat portmap hash */
+	npf_portmap_hash_t* nat_portmap_hash;
+	
 	/* Interface mapping. */
 	const npf_ifops_t *	ifops;
 	struct npf_ifmap *	ifmap;
@@ -238,6 +263,8 @@ int		npfctl_save(npf_t *, u_long, void *);
 int		npfctl_load(npf_t *, u_long, void *);
 int		npfctl_rule(npf_t *, u_long, void *);
 int		npfctl_table(npf_t *, void *);
+
+int npfctl_save_conndb_to_file(npf_t *, const char*);
 
 void		npf_stats_inc(npf_t *, npf_stats_t);
 void		npf_stats_dec(npf_t *, npf_stats_t);
@@ -322,7 +349,6 @@ void		npf_ruleset_destroy(npf_ruleset_t *);
 void		npf_ruleset_insert(npf_ruleset_t *, npf_rule_t *);
 void		npf_ruleset_reload(npf_t *, npf_ruleset_t *,
 		    npf_ruleset_t *, bool);
-npf_rule_t *	npf_ruleset_sharepm(npf_ruleset_t *, npf_natpolicy_t *);
 npf_natpolicy_t *npf_ruleset_findnat(npf_ruleset_t *, uint64_t);
 void		npf_ruleset_freealg(npf_ruleset_t *, npf_alg_t *);
 int		npf_ruleset_export(npf_t *, const npf_ruleset_t *, prop_array_t);
@@ -387,7 +413,7 @@ uint64_t	npf_nat_getid(const npf_natpolicy_t *);
 void		npf_nat_freealg(npf_natpolicy_t *, npf_alg_t *);
 
 int		npf_do_nat(npf_cache_t *, npf_conn_t *, const int);
-void		npf_nat_destroy(npf_nat_t *);
+void		npf_nat_destroy(npf_t *, npf_nat_t *);
 void		npf_nat_getorig(npf_nat_t *, npf_addr_t **, in_port_t *);
 void		npf_nat_gettrans(npf_nat_t *, npf_addr_t **, in_port_t *);
 void		npf_nat_setalg(npf_nat_t *, npf_alg_t *, uintptr_t);
@@ -415,5 +441,9 @@ void		npf_state_dump(const npf_state_t *);
 void		npf_nat_dump(const npf_nat_t *);
 void		npf_ruleset_dump(npf_t *, const char *);
 void		npf_state_setsampler(void (*)(npf_state_t *, bool));
+
+#ifdef ALEXK_DEBUG
+void npf_nat_debug_print_ports(npf_nat_t * nat);
+#endif
 
 #endif	/* _NPF_IMPL_H_ */

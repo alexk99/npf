@@ -44,6 +44,7 @@
 #include <pthread.h>
 #include <errno.h>
 #include <assert.h>
+#include <net/if.h>
 
 #define	__FAVOR_BSD
 #include <netinet/in.h>
@@ -80,6 +81,26 @@
 #define	mutex_exit(l)		pthread_mutex_unlock(l)
 #define	mutex_owned(l)		true
 #define	mutex_destroy(l)	pthread_mutex_destroy(l)
+
+#define NPF_SPINLOCK 1
+// #undef NPF_SPINLOCK
+
+#ifdef NPF_SPINLOCK
+#define	npf_lock_t		pthread_spinlock_t 
+#define	npf_lock_init(l, i, x)	pthread_spin_init(l, PTHREAD_PROCESS_PRIVATE)
+#define	npf_lock_enter(l)		pthread_spin_lock(l)
+#define	npf_lock_exit(l)		pthread_spin_unlock(l)
+#define	npf_lock_owned(l)		true
+#define	npf_lock_destroy(l)	pthread_spin_destroy(l)
+#else 
+/* MUTEX */
+#define	npf_lock_t		pthread_mutex_t
+#define	npf_lock_init(l, t)	pthread_mutex_init(l, NULL)
+#define	npf_lock_enter(l)		pthread_mutex_lock(l)
+#define	npf_lock_exit(l)		pthread_mutex_unlock(l)
+#define	npf_lock_owned(l)		true
+#define	npf_lock_destroy(l)	pthread_mutex_destroy(l)
+#endif
 
 #define	RW_READER		0
 #define	RW_WRITER		1
@@ -162,8 +183,10 @@ npfkern_atomic_swap_ptr(volatile void *ptr, void *nval)
 #define	atomic_dec_uint(x)	__sync_sub_and_fetch(x, 1)
 #define	atomic_dec_uint_nv(x)	__sync_sub_and_fetch(x, 1)
 #define	atomic_or_uint(x, v)	__sync_fetch_and_or(x, v)
+#define	atomic_and_uint(x, v)	__sync_fetch_and_and(x, v)
 #define	atomic_cas_32(p, o, n)	__sync_val_compare_and_swap(p, o, n)
 #define	atomic_cas_ptr(p, o, n)	__sync_val_compare_and_swap(p, o, n)
+#define	atomic_cas_bool(p, o, n)__sync_bool_compare_and_swap(p, o, n)
 #define atomic_swap_ptr(x, y)	npfkern_atomic_swap_ptr(x, y)
 
 /*
@@ -177,7 +200,7 @@ npfkern_pthread_create(lwp_t **lret, void (*func)(void *), void *arg)
 {
 	lwp_t *l;
 
-	if ((l = calloc(1, sizeof(lwp_t))) == NULL)
+	if ((l = (lwp_t *) calloc(1, sizeof(lwp_t))) == NULL)
 		return ENOMEM;
 	*lret = l;
 	return pthread_create(&l->thr, NULL, (void *(*)(void *))func, arg);
@@ -294,7 +317,12 @@ npfkern_kpause(const char *wmesg, bool intr, int timo, kmutex_t *mtx)
  * FIXME/TODO: To be implemented ..
  */
 struct ifnet;
-typedef struct ifnet ifnet_t;
+
+typedef struct ifnet {
+	struct if_nameindex	ini;
+	void * arg;
+	LIST_ENTRY(ifnet)	entry;
+} ifnet_t;
 
 #ifndef	IFNAMSIZ
 #define	IFNAMSIZ	16

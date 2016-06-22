@@ -113,26 +113,38 @@ npf_ifmap_lookup(npf_t *npf, const char *ifname)
 u_int
 npf_ifmap_register(npf_t *npf, const char *ifname)
 {
-	npf_ifmap_t *nim;
 	ifnet_t *ifp;
-	u_int i;
-
-	npf_config_enter(npf);
-	if ((i = npf_ifmap_lookup(npf, ifname)) != 0) {
-		goto out;
-	}
-	if ((i = npf_ifmap_new(npf)) == 0) {
-		goto out;
-	}
-	nim = &npf->ifmap[i - 1];
-	strlcpy(nim->n_ifname, ifname, IFNAMSIZ);
-
 	if ((ifp = npf->ifops->lookup(ifname)) != NULL) {
-		npf->ifops->setmeta(ifp, (void *)(uintptr_t)i);
+		u_int idx = npf_ifmap_getid(npf, ifp);
+		printf("npf_ifmap_register: %s idx %u\n", ifname, idx);
+		return idx;
 	}
-out:
-	npf_config_exit(npf);
-	return i;
+
+	return 0;
+
+
+//	npf_ifmap_t *nim;
+//	ifnet_t *ifp;
+//	u_int i;
+//
+//	npf_config_enter(npf);
+//	if ((i = npf_ifmap_lookup(npf, ifname)) != 0) {
+//		goto out;
+//	}
+//	if ((i = npf_ifmap_new(npf)) == 0) {
+//		goto out;
+//	}
+//	nim = &npf->ifmap[i - 1];
+//	strlcpy(nim->n_ifname, ifname, IFNAMSIZ);
+//
+//	if ((ifp = npf->ifops->lookup(ifname)) != NULL) {
+//		npf->ifops->setmeta(ifp, (void *)(uintptr_t)i);
+//	}
+//out:
+//	npf_config_exit(npf);
+//
+//	printf("npf_ifmap_register: %s, %d\n", ifname, i);
+//	return i;
 }
 
 void
@@ -178,6 +190,7 @@ npf_ifmap_attach(npf_t *npf, ifnet_t *ifp)
 
 	npf_config_enter(npf);
 	i = npf_ifmap_lookup(npf, ifops->getname(ifp));
+	printf("npf_ifmap_attach: setmeta %d\n", i);
 	ifops->setmeta(ifp, (void *)(uintptr_t)i);
 	npf_config_exit(npf);
 }

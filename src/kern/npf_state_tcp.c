@@ -71,11 +71,11 @@ __KERNEL_RCSID(0, "$NetBSD: npf_state_tcp.c,v 1.16 2014/07/25 20:07:32 rmind Exp
  */
 static u_int npf_tcp_timeouts[] __read_mostly = {
 	/* Closed, timeout nearly immediately. */
-	[NPF_TCPS_CLOSED]	= 10,
+	[NPF_TCPS_CLOSED]	= 30, // 30
 	/* Unsynchronised states. */
-	[NPF_TCPS_SYN_SENT]	= 30,
-	[NPF_TCPS_SIMSYN_SENT]	= 30,
-	[NPF_TCPS_SYN_RECEIVED]	= 60,
+	[NPF_TCPS_SYN_SENT]	= 30, // 30
+	[NPF_TCPS_SIMSYN_SENT]	= 30, // 30
+	[NPF_TCPS_SYN_RECEIVED]	= 60, // 60
 	/* Established: 24 hours. */
 	[NPF_TCPS_ESTABLISHED]	= 60 * 60 * 24,
 	/* FIN seen: 4 minutes (2 * MSL). */
@@ -193,7 +193,7 @@ static const uint8_t npf_tcp_fsm[NPF_TCP_NSTATES][2][TCPFC_COUNT] = {
 			/* FIN may be sent early. */
 			[TCPFC_FIN]	= NPF_TCPS_FIN_SENT,
 			/* Late SYN re-re-transmission. */
-			[TCPFC_SYN]	= NPF_TCPS_OK,
+			[TCPFC_SYN] = NPF_TCPS_OK,
 		},
 		[NPF_FLOW_BACK] = {
 			/* SYN-ACK may be retransmitted. */
@@ -218,6 +218,9 @@ static const uint8_t npf_tcp_fsm[NPF_TCP_NSTATES][2][TCPFC_COUNT] = {
 			[TCPFC_ACK]	= NPF_TCPS_OK,
 			/* FIN by the receiver. */
 			[TCPFC_FIN]	= NPF_TCPS_FIN_RECEIVED,
+
+			/**/
+			[TCPFC_SYNACK]	= NPF_TCPS_OK
 		},
 	},
 	[NPF_TCPS_FIN_SENT] = {
@@ -301,6 +304,10 @@ static const uint8_t npf_tcp_fsm[NPF_TCP_NSTATES][2][TCPFC_COUNT] = {
 static bool
 npf_tcp_inwindow(npf_cache_t *npc, npf_state_t *nst, const int di)
 {
+	// debug todo remove
+	return true;
+	// debug end
+
 	const struct tcphdr * const th = npc->npc_l4.tcp;
 	const int tcpfl = th->th_flags;
 	npf_tcpstate_t *fstate, *tstate;
@@ -476,16 +483,29 @@ npf_state_tcp(npf_cache_t *npc, npf_state_t *nst, int di)
 	if (__predict_true((tcpfl & TH_RST) == 0)) {
 		const u_int flagcase = npf_tcpfl2case(tcpfl);
 		nstate = npf_tcp_fsm[state][di][flagcase];
+		if (nstate == NPF_TCPS_CLOSED) {
+			dprintf("state fsm: state %u, di %d, flagcase: %u\n",
+					  state, di, flagcase);
+		}
 	} else if (state == NPF_TCPS_TIME_WAIT) {
 		/* Prevent TIME-WAIT assassination (RFC 1337). */
 		nstate = NPF_TCPS_OK;
 	} else {
+		dprintf("NPF_TCPS_CLOSED\n");
 		nstate = NPF_TCPS_CLOSED;
 	}
 
 	/* Determine whether TCP packet really belongs to this connection. */
 	if (!npf_tcp_inwindow(npc, nst, di)) {
-		return false;
+		// debug: todo remove
+		// npf_log("pkt is not in a window");
+
+		if (state == NPF_TCPS_CLOSED) {
+			return npf_state_init(npc, nst);
+		}
+		else {
+			return false;
+		}
 	}
 	if (__predict_true(nstate == NPF_TCPS_OK)) {
 		return true;

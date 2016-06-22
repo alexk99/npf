@@ -64,15 +64,24 @@ typedef struct {
 int	npf_sysinit(unsigned);
 void	npf_sysfini(void);
 
-npf_t *	npf_create(int, const npf_mbufops_t *, const npf_ifops_t *);
+npf_t *	npf_create(int, const npf_mbufops_t *, const npf_ifops_t *, void* );
 int	npf_load(npf_t *, void *, npf_error_t *);
 void	npf_gc(npf_t *);
 void	npf_destroy(npf_t *);
 
+#ifdef ALEXK_DEBUG3
+uint64_t npf_get_n_conndb_rbtree_cmp_nodes(npf_t *);
+uint64_t npf_get_conn_map_size(npf_t *);
+#endif /* ALEXK_DEBUG3 */
+
+
 void	npf_thread_register(npf_t *);
-int	npf_packet_handler(npf_t *, struct mbuf **, struct ifnet *, int);
+int npf_packet_handler(npf_t *npf, struct mbuf **mp, size_t l2_hdr_size, 
+		  ifnet_t *ifp, int di, __time_t sec);
 void	npf_ifmap_attach(npf_t *, struct ifnet *);
 void	npf_ifmap_detach(npf_t *, struct ifnet *);
 void	npf_stats(npf_t *, uint64_t *);
+
+void npf_checkpoint(npf_t *);
 
 #endif

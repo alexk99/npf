@@ -48,6 +48,13 @@ __KERNEL_RCSID(0, "$NetBSD: npf.c,v 1.22 2014/07/25 08:10:40 dholland Exp $");
 #include "npf_impl.h"
 #include "npf_conn.h"
 
+#include "stdarg.h"
+
+#ifdef ALEXK_DEBUG3
+uint64_t g_debug_counter;
+uint64_t g_conn_map_size;
+#endif /* ALEXK_DEBUG3 */
+
 static npf_t *	npf_kernel_ctx = NULL __read_mostly;
 
 __dso_public int
@@ -68,8 +75,23 @@ npf_sysfini(void)
 	npf_bpf_sysfini();
 }
 
+#ifdef ALEXK_DEBUG3
+__dso_public uint64_t
+npf_get_n_conndb_rbtree_cmp_nodes(npf_t * npf)
+{
+	return g_debug_counter;
+}
+
+__dso_public uint64_t
+npf_get_conn_map_size(npf_t * npf)
+{
+	return npf_conndb_size(npf->conn_db);
+}
+#endif /* ALEXK_DEBUG3 */
+
 __dso_public npf_t *
-npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops)
+npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
+		  void* log_func)
 {
 	npf_t *npf;
 
@@ -82,14 +104,33 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops)
 	npf->stats_percpu = percpu_alloc(NPF_STATS_SIZE);
 	npf->mbufops = mbufops;
 
+	npf->nat_portmap_hash = npf_portmap_init();
+	if (!npf->nat_portmap_hash) {
+		kmem_free(npf, sizeof(npf_t));
+		return NULL;
+	}
+
+#ifdef ALEXK_DEBUG
+	npf_portmap_test();
+#endif
+
 	npf_ifmap_init(npf, ifops);
 	npf_conn_init(npf, flags);
 	npf_alg_init(npf);
 	npf_ext_init(npf);
 
+#ifdef ALEXK_DEBUG3
+	g_log_func = log_func;
+	g_debug_counter = 0;
+#endif /* ALEXK_DEBUG3 */
+
 	/* Load an empty configuration. */
 	npf_config_init(npf);
 	return npf;
+}
+
+__dso_public void npf_checkpoint(npf_t * npf) {
+   qsbr_checkpoint(npf->qsbr);
 }
 
 __dso_public void
@@ -106,6 +147,7 @@ npf_destroy(npf_t *npf)
 	npf_alg_fini(npf);
 	npf_conn_fini(npf);
 	npf_ifmap_fini(npf);
+	npf_portmap_fini(npf->nat_portmap_hash);
 
 	pserialize_destroy(npf->qsbr);
 	percpu_free(npf->stats_percpu, NPF_STATS_SIZE);
@@ -122,6 +164,8 @@ __dso_public void
 npf_gc(npf_t *npf)
 {
 	npf_conn_worker(npf);
+	pserialize_perform(npf->qsbr);
+	npf_portmap_gc(npf->nat_portmap_hash);
 }
 
 __dso_public void

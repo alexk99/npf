@@ -127,7 +127,9 @@ npf_reassembly(npf_t *npf, npf_cache_t *npc, struct mbuf **mp)
  * Note: packet flow and inspection logic is in strict order.
  */
 __dso_public int
-npf_packet_handler(npf_t *npf, struct mbuf **mp, ifnet_t *ifp, int di)
+//npf_packet_handler(npf_t *npf, struct mbuf **mp, ifnet_t *ifp, int di)
+npf_packet_handler(npf_t *npf, struct mbuf **mp, size_t l2_hdr_size,
+		  ifnet_t *ifp, int di, __time_t sec)
 {
 	nbuf_t nbuf;
 	npf_cache_t npc;
@@ -141,12 +143,15 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, ifnet_t *ifp, int di)
 	pserialize_checkpoint(npf->qsbr);
 	KASSERT(ifp != NULL);
 
+	dprintf("npf_packet_handler\n");
+	npf->sec = sec;
+
 	/*
 	 * Initialise packet information cache.
 	 * Note: it is enough to clear the info bits.
 	 */
 	npc.npc_ctx = npf;
-	nbuf_init(npf, &nbuf, *mp, ifp);
+	nbuf_init2(npf, &nbuf, *mp, l2_hdr_size, ifp);
 	npc.npc_nbuf = &nbuf;
 	npc.npc_info = 0;
 
@@ -171,6 +176,7 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, ifnet_t *ifp, int di)
 		}
 	}
 
+	dprintf("connection inspect\n");
 	/* Inspect the list of connections (if found, acquires a reference). */
 	con = npf_conn_inspect(&npc, di, &error);
 
@@ -178,17 +184,23 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, ifnet_t *ifp, int di)
 	if (con && npf_conn_pass(con, &rp)) {
 		npf_stats_inc(npf, NPF_STAT_PASS_CONN);
 		KASSERT(error == 0);
+		dprintf ("npf: pass 1\n");
 		goto pass;
 	}
 	if (__predict_false(error)) {
-		if (error == ENETUNREACH)
+		if (error == ENETUNREACH) {
+			dprintf2("npf: block 1: ENETUNREACH\n");
 			goto block;
+		}
 		goto out;
 	}
 
 	/* Acquire the lock, inspect the ruleset using this packet. */
 	int slock = npf_config_read_enter();
 	npf_ruleset_t *rlset = npf_config_ruleset(npf);
+
+	dprintf("conn: %p\n", con);
+	dprintf("rule inspect\n");
 
 	rl = npf_ruleset_inspect(&npc, rlset, di, NPF_LAYER_3);
 	if (__predict_false(rl == NULL)) {
@@ -197,9 +209,11 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, ifnet_t *ifp, int di)
 
 		if (pass) {
 			npf_stats_inc(npf, NPF_STAT_PASS_DEFAULT);
+			dprintf ("npf: pass 2\n");
 			goto pass;
 		}
 		npf_stats_inc(npf, NPF_STAT_BLOCK_DEFAULT);
+		dprintf2("npf: block 2: block_default\n");
 		goto block;
 	}
 
@@ -210,12 +224,15 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, ifnet_t *ifp, int di)
 	KASSERT(rp == NULL);
 	rp = npf_rule_getrproc(rl);
 
+	dprintf("rule conclude\n");
+
 	/* Conclude with the rule and release the lock. */
 	error = npf_rule_conclude(rl, &retfl);
 	npf_config_read_exit(slock);
 
 	if (error) {
 		npf_stats_inc(npf, NPF_STAT_BLOCK_RULESET);
+		dprintf2("npf: block 3: block_ruleset\n");
 		goto block;
 	}
 	npf_stats_inc(npf, NPF_STAT_PASS_RULESET);
@@ -237,12 +254,16 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, ifnet_t *ifp, int di)
 		}
 	}
 pass:
+	dprintf("pass point\n");
 	decision = NPF_DECISION_PASS;
 	KASSERT(error == 0);
 	/*
 	 * Perform NAT.
 	 */
 	error = npf_do_nat(&npc, con, di);
+	if (__predict_false(error)) {
+		dprintf2("do nat err: %d\n", error);
+	}
 block:
 	/*
 	 * Execute the rule procedure, if any is associated.
@@ -268,12 +289,15 @@ out:
 	}
 
 	/* Reset mbuf pointer before returning to the caller. */
-	if ((*mp = nbuf_head_mbuf(&nbuf)) == NULL) {
+	if (__predict_false((*mp = nbuf_head_mbuf(&nbuf)) == NULL)) {
+		dprintf2 ("npf: block 10: ENOMEM or error\n");
 		return error ? error : ENOMEM;
 	}
 
+	dprintf("decision: %d, err: %d\n", decision, error);
+
 	/* Pass the packet if decided and there is no error. */
-	if (decision == NPF_DECISION_PASS && !error) {
+	if (__predict_true(decision == NPF_DECISION_PASS && !error)) {
 		/*
 		 * XXX: Disable for now, it will be set accordingly later,
 		 * for optimisations (to reduce inspection).
@@ -288,6 +312,7 @@ out:
 	 * ICMP destination unreachable.
 	 */
 	if (retfl && npf_return_block(&npc, retfl)) {
+		dprintf2 ("npf: block 4\n");
 		*mp = NULL;
 	}
 

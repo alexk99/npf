@@ -11,6 +11,12 @@ CFLAGS+=	-D__RCSID\(x\)=
 CFLAGS+=	-Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 CFLAGS+=	-Wno-unused
 
+CFLAGS+=	-DALEXK_DEBUG
+CFLAGS+=	-DALEXK_DEBUG2
+CFLAGS+=	-DALEXK_DEBUG3
+
+# CFLAGS+=        -DNPF_SPINLOCK
+
 SYSNAME:=	$(shell uname -s)
 
 #
@@ -24,6 +30,10 @@ else
 CFLAGS+=	-fvisibility=hidden
 CFLAGS+=	-DNDEBUG
 LDFLAGS=	-flto
+
+# debug
+CFLAGS+=	-fno-omit-frame-pointer
+
 endif
 LDFLAGS+=	-lpthread -lpcap -lqsbr -lcdb -lprop -lbpfjit
 ifeq ($(SYSNAME),Linux)
@@ -36,8 +46,51 @@ endif
 
 ifeq ($(SYSNAME),Linux)
 CFLAGS+=	-D_POSIX_C_SOURCE=200809L
-CFLAGS+=	-D_BSD_SOURCE -D__FAVOR_BSD=1
+CFLAGS+=	-D_DEFAULT_SOURCE
 endif
+
+###
+### CPP
+###
+CPPFLAGS=	-std=c++11 -O2 -flto -g -Wall -Wextra -Werror
+CPPFLAGS+=	-Wpointer-arith
+CPPFLAGS+=	-I stand -D_NPF_STANDALONE #-DUSE_JUDY
+CPPFLAGS+=	-D__RCSID\(x\)=
+
+CPPFLAGS+=	-Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
+CPPFLAGS+=	-Wno-unused
+
+CPPFLAGS+=	-DALEXK_DEBUG
+CPPFLAGS+=	-DALEXK_DEBUG2
+CFLAGS+=	-DALEXK_DEBUG3
+
+#
+# WARNING: All symbols must be hidden by default to not conflict with
+# the libnpf(3) library.  The debug version would, however, conflict.
+#
+ifeq ($(DEBUG),1)
+CPPFLAGS+=	-O1 -DDEBUG -fno-omit-frame-pointer
+CPPFLAGS+=	-D_NPF_TESTING
+else
+CPPFLAGS+=	-fvisibility=hidden
+CPPFLAGS+=	-DNDEBUG
+#LDFLAGS=	-flto
+endif
+#LDFLAGS+=	-lpthread -lpcap -lqsbr -lcdb -lprop -lbpfjit
+ifeq ($(SYSNAME),Linux)
+#LDFLAGS+=	-ljemalloc #-lJudy
+endif
+
+#
+# System specific flags
+#
+
+ifeq ($(SYSNAME),Linux)
+CPPFLAGS+=	-D_POSIX_C_SOURCE=200809L
+CPPFLAGS+=	-D_DEFAULT_SOURCE
+endif
+
+### end CPP
 
 #
 # Objects to compile
@@ -54,6 +107,8 @@ OBJS+=		stand/bpf_filter.o
 OBJS+=		stand/rb.o stand/ptree.o
 OBJS+=		stand/murmurhash.o stand/subr_hash.o
 OBJS+=		stand/mempool.o stand/tls_pth.o
+OBJS+=		npf_portmap.o
+OBJS+=		npf_conn_map.o npf_conn_map_ipv6.o npf_city_hasher.o
 
 #
 # Flags for the library target
@@ -72,6 +127,8 @@ install/%.la:	ILIBDIR=	$(DESTDIR)/$(LIBDIR)
 install:	IINCDIR=	$(DESTDIR)/$(INCDIR)
 install:	IMANDIR=	$(DESTDIR)/$(MANDIR)/man3/
 
+CPP = g++
+
 #
 # Targets
 #
@@ -80,6 +137,9 @@ lib: $(LIB).la
 
 %.lo: %.c
 	libtool --mode=compile --tag CC $(CC) $(CFLAGS) -c $<
+
+%.lo: %.cpp
+	libtool --mode=compile --tag CC $(CPP) $(CPPFLAGS) -c $<
 
 $(LIB).la: $(shell echo $(OBJS) | sed 's/\.o/\.lo/g')
 	libtool --mode=link --tag CC $(CC) $(LDFLAGS) -o $@ $(notdir $^)

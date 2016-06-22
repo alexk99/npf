@@ -160,6 +160,7 @@ npf_config_load(npf_t *npf, npf_ruleset_t *rset, npf_tableset_t *tset,
 		return;
 	}
 
+
 	/*
 	 * If we are going to flush the connections or load the new ones,
 	 * then disable the connection tracking for the grace period.

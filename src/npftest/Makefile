@@ -21,7 +21,7 @@ SYSNAME:=	$(shell uname -s)
 
 ifeq ($(SYSNAME),Linux)
 CFLAGS+=	-D_POSIX_C_SOURCE=200809L
-CFLAGS+=	-D_BSD_SOURCE -D__FAVOR_BSD=1
+CFLAGS+=	-D_DEFAULT_SOURCE
 endif
 
 OBJS=		npftest.o npfstream.o

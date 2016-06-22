@@ -323,12 +323,16 @@ npf_cache_ip(npf_cache_t *npc, nbuf_t *nbuf)
 
 	switch (ver >> 4) {
 	case IPVERSION: {
-		struct ip *ip;
-
-		ip = nbuf_ensure_contig(nbuf, sizeof(struct ip));
-		if (ip == NULL) {
+		if (__predict_false(!nbuf_check_ip_hdr_size(nbuf))) {
 			return 0;
 		}
+
+		struct ip *ip = (struct ip*) nbuf->nb_nptr;
+
+//		ip = nbuf_ensure_contig(nbuf, sizeof(struct ip));
+//		if (ip == NULL) {
+//			return 0;
+//		}
 
 		/* Check header length and fragment offset. */
 		if ((u_int)(ip->ip_hl << 2) < sizeof(struct ip)) {
@@ -461,11 +465,21 @@ again:
 	}
 	hlen = npc->npc_hlen;
 
+	// todo
+	char* p;
+
 	switch (npc->npc_proto) {
 	case IPPROTO_TCP:
 		/* Cache: layer 4 - TCP. */
-		npc->npc_l4.tcp = nbuf_advance(nbuf, hlen,
-		    sizeof(struct tcphdr));
+
+		// todo
+		p = (char*) nbuf->nb_nptr;
+		p += hlen;
+		nbuf->nb_nptr = p;
+		npc->npc_l4.tcp = (struct tcphdr*) p;
+
+//		npc->npc_l4.tcp = nbuf_advance(nbuf, hlen,
+//		    sizeof(struct tcphdr));
 		l4flags = NPC_LAYER4 | NPC_TCP;
 		break;
 	case IPPROTO_UDP:
@@ -578,6 +592,7 @@ npf_rwrcksum(const npf_cache_t *npc, u_int which,
 
 		/* Recalculate IPv4 checksum and rewrite. */
 		ip->ip_sum = npf_addr_cksum(ipsum, alen, oaddr, addr);
+		dprintf("new checksum: %d\n", ip->ip_sum);
 	} else {
 		/* No checksum for IPv6. */
 		KASSERT(npf_iscached(npc, NPC_IP6));

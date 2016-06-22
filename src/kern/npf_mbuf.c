@@ -67,11 +67,28 @@ __KERNEL_RCSID(0, "$NetBSD: npf_mbuf.c,v 1.13 2014/08/10 19:09:43 rmind Exp $");
 void
 nbuf_init(npf_t *npf, nbuf_t *nbuf, struct mbuf *m, const ifnet_t *ifp)
 {
-	u_int ifid = npf_ifmap_getid(npf, ifp);
+	u_int ifid = (uintptr_t) ifp->arg;
 
 	KASSERT(m_flags_p(m, M_PKTHDR));
 	nbuf->nb_mops = npf->mbufops;
 
+   nbuf->l2_hdr_size = 0;
+	nbuf->nb_mbuf0 = m;
+	nbuf->nb_ifp = ifp;
+	nbuf->nb_ifid = ifid;
+	nbuf_reset(nbuf);
+}
+
+void
+nbuf_init2(npf_t *npf, nbuf_t *nbuf, struct mbuf *m, size_t l2_hdr_size,
+		  const ifnet_t *ifp)
+{
+	u_int ifid = (uintptr_t) ifp->arg;
+
+	KASSERT(m_flags_p(m, M_PKTHDR));
+	nbuf->nb_mops = npf->mbufops;
+
+   nbuf->l2_hdr_size = l2_hdr_size;
 	nbuf->nb_mbuf0 = m;
 	nbuf->nb_ifp = ifp;
 	nbuf->nb_ifid = ifid;
@@ -81,10 +98,20 @@ nbuf_init(npf_t *npf, nbuf_t *nbuf, struct mbuf *m, const ifnet_t *ifp)
 void
 nbuf_reset(nbuf_t *nbuf)
 {
-	struct mbuf *m = nbuf->nb_mbuf0;
-
+	struct mbuf* m = nbuf->nb_mbuf0;
 	nbuf->nb_mbuf = m;
-	nbuf->nb_nptr = mtod(m, void *);
+
+	size_t l2_hdr_size = nbuf->l2_hdr_size;
+
+	if (__predict_true(l2_hdr_size > 0)) {
+		/* Offset in mbuf data. */
+		uint8_t *d = mtod(m, uint8_t *);
+		d += l2_hdr_size;
+		nbuf->nb_nptr = d;
+	}
+	else {
+		nbuf->nb_nptr = mtod(m, void *);
+	}
 }
 
 void *
@@ -169,6 +196,15 @@ nbuf_advance(nbuf_t *nbuf, size_t len, size_t ensure)
 	return d;
 }
 
+int nbuf_check_ip_hdr_size(nbuf_t *nbuf)
+{
+	size_t hdr_size = nbuf->l2_hdr_size + sizeof(struct ip);
+	size_t pkt_len = m_buflen(nbuf->nb_mbuf);
+
+	return (pkt_len >= hdr_size) ? 1 : 0;
+}
+
+
 /*
  * nbuf_ensure_contig: check whether the specified length from the current
  * point in the nbuf is contiguous.  If not, rearrange the chain to be so.
@@ -182,7 +218,7 @@ nbuf_ensure_contig(nbuf_t *nbuf, size_t len)
 	const struct mbuf * const n = nbuf->nb_mbuf;
 	const size_t off = (uintptr_t)nbuf->nb_nptr - mtod(n, uintptr_t);
 
-	KASSERT(off <= m_buflen(n));
+	// KASSERT(off <= m_buflen(n));
 
 	if (__predict_false(m_buflen(n) < (off + len))) {
 		struct mbuf *m = nbuf->nb_mbuf0;

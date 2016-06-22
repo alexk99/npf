@@ -501,6 +501,8 @@ npf_mk_connlist(npf_t *npf, prop_array_t conlist, npf_ruleset_t *natlist,
 int
 npfctl_load(npf_t *npf, u_long cmd, void *data)
 {
+	dprintf("npfctl_load start\n");
+
 	struct plistref *pref = data;
 	prop_dictionary_t npf_dict, errdict;
 	prop_array_t alglist, natlist, tables, rprocs, rules, conlist;
@@ -714,6 +716,33 @@ out:
 		prop_object_release(npf_dict);
 #endif
 	}
+	return error;
+}
+
+__dso_public int
+npfctl_save_conndb_to_file(npf_t *npf, const char* file_name)
+{
+	prop_array_t conlist;
+	int error;
+
+	conlist = prop_array_create();
+
+	/*
+	 * Serialise the connections and NAT policies.
+	 */
+	npf_config_enter(npf);
+	error = npf_conndb_export(npf, conlist);
+	if (error) {
+		goto out;
+	}
+
+	prop_array_externalize_to_file(conlist, file_name);
+
+	error = 0;
+
+out:
+	npf_config_exit(npf);
+	prop_object_release(conlist);
 	return error;
 }
 

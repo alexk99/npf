@@ -40,58 +40,95 @@
 
 #include "npf_impl.h"
 
-typedef struct npf_connkey npf_connkey_t;
+typedef struct npf_connkey_ipv4 npf_connkey_ipv4_t;
+typedef struct npf_connkey_ipv6 npf_connkey_ipv6_t;
 
 #if defined(__NPF_CONN_PRIVATE)
 
-/*
- * See npf_conn_conkey() function for the key layout description.
- */
-#define	NPF_CONN_NKEYWORDS	(2 + ((sizeof(npf_addr_t) * 2) >> 2))
-#define	NPF_CONN_MAXKEYLEN	(NPF_CONN_NKEYWORDS * sizeof(uint32_t))
-#define	NPF_CONN_GETALEN(key)	((key)->ck_key[0] & 0xffff)
-#define	NPF_CONN_KEYLEN(key)	(8 + (2 * NPF_CONN_GETALEN(key)))
+#include "npf_connkey.h"
 
-struct npf_connkey {
-	/* Entry node and back-pointer to the actual connection. */
-	rb_node_t		ck_rbnode;
-	uint32_t		ck_key[NPF_CONN_NKEYWORDS];
-	npf_conn_t *		ck_backptr;
-};
+#define	CONN_ACTIVE	0x004	/* visible on inspection */
+#define	CONN_PASS	0x008	/* perform implicit passing */
+#define	CONN_EXPIRE	0x010	/* explicitly expire */
+#define	CONN_REMOVED 0x020	/* "forw/back" entries removed */
+#define	CONN_IPV4	0x040	/* ipv4 connection */
+#define	CONN_IPV6	0x080	/* ipv6 connection */
+
+/* particial hash values of backward and forward keys are equal */
+#define	CONN_PARTICIAL_HASH_COLLISION	0x100
 
 /*
  * The main connection tracking structure.
  */
 
 struct npf_conn {
-	/*
-	 * Connection "forwards" and "backwards" entries, plus the
-	 * interface ID (if zero, then the state is global).
+	npf_lock_t		c_lock;
+
+	/* It's the first 32 bits of forward key hash value.
+	 * Particial key is used to determine the direction of a connection
+	 * by its key hash value. Since always two keys lead to a single connection
+	 * we have to determine which was used to find a connection in a particular
+	 * case. To do that we compare a key hash value with a forward keys hash value.
+	 * If values are equal then the direction is forward. 
+	 * 
+	 * It's enought to compare
+	 * only first 32 bits of hash values due to rare hash collisions. 
+	 * If a hash collision occurs we have to do the real comparasion by calculating
+	 * full hash value and comparing it with the given key hash value. 
+	 * 
+	 * Since we compare only particial keys hash values the collision flag must 
+	 * be determined by comparing particial values too. Fact of collision 
+	 * is stored in CONN_PARTICIAL_HASH_COLLISION bit of the connection c_flag.
 	 */
-	npf_connkey_t		c_forw_entry;
-	npf_connkey_t		c_back_entry;
-	u_int			c_proto;
-	u_int			c_ifid;
-
-	/* Flags and entry in the connection database or G/C list. */
-	u_int			c_flags;
-	npf_conn_t *		c_next;
-
-	/* Associated rule procedure or NAT (if any). */
-	npf_rproc_t *		c_rproc;
-	npf_nat_t *		c_nat;
-
+	uint32_t				c_forw_entry_particial_hash;
+	
 	/*
 	 * The protocol state, reference count and the last activity
 	 * time (used to calculate expiration time).
 	 */
-	kmutex_t		c_lock;
 	npf_state_t		c_state;
-	u_int			c_refcnt;
 	uint64_t		c_atime;
+	
+	u_int			c_proto;
+	
+	/* Interface ID (if zero, then the state is global) */
+	u_int			c_ifid;
+
+	/* Flags */
+	u_int			c_flags;
+	
+	/* Associated rule procedure or NAT (if any). */
+	npf_nat_t *		c_nat;
+	npf_rproc_t *		c_rproc;
+	
+	/* Entry in the connection database or G/C list. */
+	npf_conn_t *		c_next;
+};
+
+struct npf_conn_ipv4 {
+	struct npf_conn conn;
+	
+	/*
+	 * Connection "forwards" and "backwards" entries
+	 */
+	npf_connkey_ipv4_t		c_forw_entry;
+	npf_connkey_ipv4_t		c_back_entry;
+};
+
+struct npf_conn_ipv6 {
+	struct npf_conn conn;
+	
+	/*
+	 * Connection "forwards" and "backwards" entries
+	 */
+	npf_connkey_ipv6_t		c_forw_entry;
+	npf_connkey_ipv6_t		c_back_entry;
 };
 
 #endif
+
+typedef struct npf_connkey_ipv4 npf_connkey_ipv4_t;
+typedef struct npf_connkey_ipv6 npf_connkey_ipv6_t;
 
 /*
  * Connection tracking interface.
@@ -101,7 +138,7 @@ void		npf_conn_fini(npf_t *);
 void		npf_conn_tracking(npf_t *, bool);
 void		npf_conn_load(npf_t *, npf_conndb_t *, bool);
 
-unsigned	npf_conn_conkey(const npf_cache_t *, npf_connkey_t *, bool);
+unsigned	npf_conn_conkey(const npf_cache_t *, uint32_t *, bool);
 npf_conn_t *	npf_conn_lookup(const npf_cache_t *, const int, bool *);
 npf_conn_t *	npf_conn_inspect(npf_cache_t *, const int, int *);
 npf_conn_t *	npf_conn_establish(npf_cache_t *, int, bool);
@@ -125,11 +162,18 @@ void		npf_conn_print(const npf_conn_t *);
 npf_conndb_t *	npf_conndb_create(void);
 void		npf_conndb_destroy(npf_conndb_t *);
 
-npf_conn_t *	npf_conndb_lookup(npf_conndb_t *, const npf_connkey_t *,
-		    bool *);
-bool		npf_conndb_insert(npf_conndb_t *, npf_connkey_t *,
-		    npf_conn_t *);
-npf_conn_t *	npf_conndb_remove(npf_conndb_t *, npf_connkey_t *);
+uint64_t npf_conndb_size(npf_conndb_t *);
+uint64_t npf_conndb_ipv6_size(npf_conndb_t *);
+
+uint64_t npf_conndb_hash(npf_conndb_t*, const void*, const u_int);
+
+npf_conn_t * npf_conndb_lookup(npf_conndb_t *, const void *, const u_int, bool *);
+bool npf_conndb_insert(npf_conndb_t *, void *, const u_int, uint64_t, npf_conn_t *);
+npf_conn_t * npf_conndb_remove(npf_conndb_t *, void *, const u_int, uint64_t);
+
+npf_conn_t *
+npf_conndb_count(npf_conndb_t *cd);
+
 
 void		npf_conndb_enqueue(npf_conndb_t *, npf_conn_t *);
 void		npf_conndb_dequeue(npf_conndb_t *, npf_conn_t *,
@@ -137,5 +181,7 @@ void		npf_conndb_dequeue(npf_conndb_t *, npf_conn_t *,
 npf_conn_t *	npf_conndb_getlist(npf_conndb_t *);
 void		npf_conndb_settail(npf_conndb_t *, npf_conn_t *);
 int		npf_conndb_export(npf_t *, prop_array_t);
+
+void npf_conn_print_atime(const npf_conn_t *);
 
 #endif	/* _NPF_CONN_H_ */

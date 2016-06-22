@@ -49,161 +49,141 @@ __KERNEL_RCSID(0, "$NetBSD: npf_conndb.c,v 1.2 2014/07/23 01:25:34 rmind Exp $")
 #define __NPF_CONN_PRIVATE
 #include "npf_conn.h"
 #include "npf_impl.h"
-
-#define	CONNDB_HASH_BUCKETS	1024	/* XXX tune + make tunable */
-#define	CONNDB_HASH_MASK	(CONNDB_HASH_BUCKETS - 1)
-
-typedef struct {
-	rb_tree_t		hb_tree;
-	krwlock_t		hb_lock;
-	u_int			hb_count;
-} npf_hashbucket_t;
+#include "npf_conn_map.h"
+#include "npf_conn_map_ipv6.h"
+#include "npf_city_hasher.h"
+#include "likely.h"
 
 struct npf_conndb {
+	void* conn_map_ipv4;
+	void* conn_map_ipv6;
 	npf_conn_t *		cd_recent;
 	npf_conn_t *		cd_list;
 	npf_conn_t *		cd_tail;
 	uint32_t		cd_seed;
-	void *			cd_tree;
-	npf_hashbucket_t	cd_hashtbl[];
 };
 
+// debug: todo remove
+extern uint64_t g_debug_counter;
+
 /*
- * Connection hash table and RB-tree helper routines.
  * Note: (node1 < node2) shall return negative.
  */
 
-static signed int
-conndb_rbtree_cmp_nodes(void *ctx, const void *n1, const void *n2)
+inline static signed int
+conndb_forw_cmp(npf_conn_t* con, const void* key, const u_int key_nwords)
 {
-	const npf_connkey_t * const ck1 = n1;
-	const npf_connkey_t * const ck2 = n2;
-	const u_int keylen = MIN(NPF_CONN_KEYLEN(ck1), NPF_CONN_KEYLEN(ck2));
+	uint32_t* p;
 
-	KASSERT((keylen >> 2) <= NPF_CONN_NKEYWORDS);
-	return memcmp(ck1->ck_key, ck2->ck_key, keylen);
+	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
+		npf_conn_ipv4_t* con_ipv4 = (npf_conn_ipv4_t*) con;
+		p = &con_ipv4->c_forw_entry.ck_key[0];
+	}
+	else {
+		npf_conn_ipv6_t* con_ipv6 = (npf_conn_ipv6_t*) con;
+		p = &con_ipv6->c_forw_entry.ck_key[0];
+	}
+
+	return memcmp(key, p, key_nwords << 2);
 }
 
-static signed int
-conndb_rbtree_cmp_key(void *ctx, const void *n1, const void *key)
+inline static void
+npf_conndb_print_key(const uint32_t* key, const u_int key_nwords)
 {
-	const npf_connkey_t * const ck1 = n1;
-	const npf_connkey_t * const ck2 = key;
-	return conndb_rbtree_cmp_nodes(ctx, ck1, ck2);
-}
-
-static const rb_tree_ops_t conndb_rbtree_ops = {
-	.rbto_compare_nodes	= conndb_rbtree_cmp_nodes,
-	.rbto_compare_key	= conndb_rbtree_cmp_key,
-	.rbto_node_offset	= offsetof(npf_connkey_t, ck_rbnode),
-	.rbto_context		= NULL
-};
-
-static npf_hashbucket_t *
-conndb_hash_bucket(npf_conndb_t *cd, const npf_connkey_t *key)
-{
-	const u_int keylen = NPF_CONN_KEYLEN(key);
-	uint32_t hash = murmurhash2(key->ck_key, keylen, cd->cd_seed);
-	return &cd->cd_hashtbl[hash & CONNDB_HASH_MASK];
+	u_int i;
+	for (i=0; i<key_nwords; i++) {
+		printf("%u", key[i]);
+	}
+	printf("\n");
 }
 
 npf_conndb_t *
 npf_conndb_create(void)
 {
-	size_t len = offsetof(npf_conndb_t, cd_hashtbl[CONNDB_HASH_BUCKETS]);
-	npf_conndb_t *cd;
+	size_t len = sizeof(npf_conndb_t);
+	npf_conndb_t *cd = kmem_zalloc(len, KM_SLEEP);
 
-	cd = kmem_zalloc(len, KM_SLEEP);
-	for (u_int i = 0; i < CONNDB_HASH_BUCKETS; i++) {
-		npf_hashbucket_t *hb = &cd->cd_hashtbl[i];
-
-		rb_tree_init(&hb->hb_tree, &conndb_rbtree_ops);
-		rw_init(&hb->hb_lock);
-		hb->hb_count = 0;
-	}
 	cd->cd_seed = cprng_fast32();
+	cd->conn_map_ipv4 = npf_conn_map_init();
+	cd->conn_map_ipv6 = npf_conn_map_ipv6_init();
+
 	return cd;
 }
 
 void
 npf_conndb_destroy(npf_conndb_t *cd)
 {
-	size_t len = offsetof(npf_conndb_t, cd_hashtbl[CONNDB_HASH_BUCKETS]);
+	npf_conn_map_fini(cd->conn_map_ipv4);
+	npf_conn_map_ipv6_fini(cd->conn_map_ipv6);
+
+	size_t len = sizeof(npf_conndb_t);
 
 	KASSERT(cd->cd_recent == NULL);
 	KASSERT(cd->cd_list == NULL);
 	KASSERT(cd->cd_tail == NULL);
 
-	for (u_int i = 0; i < CONNDB_HASH_BUCKETS; i++) {
-		npf_hashbucket_t *hb = &cd->cd_hashtbl[i];
-
-		KASSERT(hb->hb_count == 0);
-		KASSERT(!rb_tree_iterate(&hb->hb_tree, NULL, RB_DIR_LEFT));
-		rw_destroy(&hb->hb_lock);
-	}
-#ifdef USE_JUDY
-	Word_t bytes;
-	JHSFA(bytes, cd->cd_tree);
-#endif
 	kmem_free(cd, len);
+}
+
+/*
+ *
+ */
+uint64_t
+npf_conndb_hash(npf_conndb_t* cd, const void* key, const u_int key_nwords)
+{
+	/* return murmurhash2(key->ck_key, NPF_CONN_KEYLEN(key), cd->cd_seed); */
+
+	(void) cd;
+	return npf_city_hash((const char*) key, key_nwords << 2);
 }
 
 /*
  * npf_conndb_lookup: find a connection given the key.
  */
 npf_conn_t *
-npf_conndb_lookup(npf_conndb_t *cd, const npf_connkey_t *key, bool *forw)
+npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
+		  bool *forw)
 {
-	npf_connkey_t *foundkey;
-	npf_hashbucket_t *hb;
-	npf_conn_t *con;
+	npf_conn_t* con;
+	const uint64_t hv = npf_conndb_hash(cd, key, key_nwords);
 
-	/* Get a hash bucket from the cached key data. */
-	hb = conndb_hash_bucket(cd, key);
-	if (hb->hb_count == 0) {
+	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
+		con = (npf_conn_t*) npf_conn_map_lookup(cd->conn_map_ipv4, key, hv);
+	}
+	else {
+		con = (npf_conn_t*) npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key, hv);
+	}
+
+	if (con == NULL) {
 		return NULL;
 	}
 
-	/* Lookup the tree given the key and get the actual connection. */
-	rw_enter(&hb->hb_lock, RW_READER);
-	foundkey = rb_tree_find_node(&hb->hb_tree, key);
-	if (foundkey == NULL) {
-		rw_exit(&hb->hb_lock);
-		return NULL;
+	/* determine forw */
+	if (unlikely(con->c_flags & CONN_PARTICIAL_HASH_COLLISION)) {
+		/* hash collision, we need to do a real comparing */
+		*forw = (conndb_forw_cmp(con, key, key_nwords) == 0);
 	}
-	con = foundkey->ck_backptr;
-	*forw = (foundkey == &con->c_forw_entry);
+	else {
+		uint32_t particial_hv = (uint32_t) hv & 0xFFFFFFFF;
+		*forw = (con->c_forw_entry_particial_hash == particial_hv);
+	}
 
-	/* Acquire the reference and return the connection. */
-	atomic_inc_uint(&con->c_refcnt);
-	rw_exit(&hb->hb_lock);
 	return con;
 }
 
 /*
- * npf_conndb_insert: insert the key representing the connection.
+ * npf_conndb_insert: insert a key representing a connection.
  */
 bool
-npf_conndb_insert(npf_conndb_t *cd, npf_connkey_t *key, npf_conn_t *con)
+npf_conndb_insert(npf_conndb_t *cd, void *key, const u_int key_nwords,
+		  uint64_t hv, npf_conn_t *con)
 {
-#ifdef USE_JUDY
-	PWord_t pval;
-
-	JHSI(pval, cd->cd_tree, key, NPF_CONN_KEYLEN(key));
-	if (pval == PJERR || *pval != 0)
-		return false;
-	*pval = (uintptr_t)key;
-	return true;
-#else
-	npf_hashbucket_t *hb = conndb_hash_bucket(cd, key);
-	bool ok;
-
-	rw_enter(&hb->hb_lock, RW_WRITER);
-	ok = rb_tree_insert_node(&hb->hb_tree, key) == key;
-	hb->hb_count += (u_int)ok;
-	rw_exit(&hb->hb_lock);
-	return ok;
-#endif
+	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
+		return npf_conn_map_insert(cd->conn_map_ipv4, key, hv, (void*) con);
+	}
+	else {
+		return npf_conn_map_ipv6_insert(cd->conn_map_ipv6, key, hv, (void*) con);
+	}
 }
 
 /*
@@ -211,29 +191,27 @@ npf_conndb_insert(npf_conndb_t *cd, npf_connkey_t *key, npf_conn_t *con)
  * it represents.
  */
 npf_conn_t *
-npf_conndb_remove(npf_conndb_t *cd, npf_connkey_t *key)
+npf_conndb_remove(npf_conndb_t *cd, void *key, const u_int key_nwords,
+		  uint64_t hv)
 {
-#ifdef USE_JUDY
-	PWord_t rc;
-
-	JHSD(rc, cd->cd_tree, key, NPF_CONN_KEYLEN(key));
-	return rc ? key->ck_backptr : NULL;
-#else
-	npf_hashbucket_t *hb = conndb_hash_bucket(cd, key);
-	npf_connkey_t *foundkey;
-	npf_conn_t *con;
-
-	rw_enter(&hb->hb_lock, RW_WRITER);
-	if ((foundkey = rb_tree_find_node(&hb->hb_tree, key)) != NULL) {
-		rb_tree_remove_node(&hb->hb_tree, foundkey);
-		con = foundkey->ck_backptr;
-		hb->hb_count--;
-	} else {
-		con = NULL;
+	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
+		return (npf_conn_t*) npf_conn_map_remove(cd->conn_map_ipv4, key, hv);
 	}
-	rw_exit(&hb->hb_lock);
-	return con;
-#endif
+	else {
+		return (npf_conn_t*) npf_conn_map_ipv6_remove(cd->conn_map_ipv6, key, hv);
+	}
+}
+
+uint64_t
+npf_conndb_size(npf_conndb_t *cd)
+{
+	return npf_conn_map_size(cd->conn_map_ipv4);
+}
+
+uint64_t
+npf_conndb_ipv6_size(npf_conndb_t *cd)
+{
+	return npf_conn_map_ipv6_size(cd->conn_map_ipv6);
 }
 
 /*
@@ -258,6 +236,8 @@ npf_conndb_enqueue(npf_conndb_t *cd, npf_conn_t *con)
 void
 npf_conndb_dequeue(npf_conndb_t *cd, npf_conn_t *con, npf_conn_t *prev)
 {
+	dprintf2("npf_conndb_dequeue\n");
+
 	if (prev == NULL) {
 		KASSERT(cd->cd_list == con);
 		cd->cd_list = con->c_next;

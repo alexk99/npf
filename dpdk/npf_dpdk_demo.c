@@ -56,7 +56,7 @@
 #define	PKT_BATCH		(64)
 
 static struct rte_mempool *	pktmbuf_pool = NULL;
-static bool			debug = false;
+static bool			debug = true;
 
 static void
 dpdk_init(int argc, char **argv)
@@ -141,7 +141,7 @@ load_npf_config(npf_t *npf, nl_config_t *ncf)
 	 * - Destroy the config (reference becomes invalid).
 	 */
 	ref = npf_config_build(ncf);
-	if (npf_load(npf, ref, &errinfo) != 0) {
+   if (npf_load(npf, ref, &errinfo) != 0) {
 		errx(EXIT_FAILURE, "npf_load() failed");
 	}
 	npf_config_destroy(ncf);
@@ -229,28 +229,41 @@ main(int argc, char **argv)
 	nl_config_t *ncf;
 	int c[2] = { 0, 0 };
 
+	printf("tp0\n");
+
+
 	/* Initialise DPDK and NPF. */
 	dpdk_init(argc, argv);
 	npf_sysinit(NWORKERS);
 	npf_dpdk_init(pktmbuf_pool);
 
+	printf("tp1\n");
+
 	/* Create a new NPF instance. */
 	npf = npf_dpdk_create(0);
 	assert(npf != NULL);
+
+	printf("tp2\n");
 
 	/* Attach a virtual interface to NPF. */
 	ifp = npf_dpdk_ifattach(npf, "dpdk0", 1);
 	assert(ifp != NULL);
 
+	printf("tp3\n");
+	
+	npf_thread_register(npf);
+	
+
 	/* Create NPF configuration (ruleset) and load it. */
 	ncf = create_npf_config();
 	load_npf_config(npf, ncf);
+
+	printf("tp10\n");
 
 	/*
 	 * Process the packets.  Note: before processing packets,
 	 * each thread doing that must register with NPF instance.
 	 */
-	npf_thread_register(npf);
 	for (unsigned i = 0; i < (16 * 1024); i++) {
 		process_packets(npf, ifp, PFIL_IN, c);
 	}
