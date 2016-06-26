@@ -709,6 +709,13 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 		fw = &con_ipv6->c_forw_entry.ck_key[0];
 		bk = &con_ipv6->c_back_entry.ck_key[0];
 		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
+
+		/* nat */
+		con_ipv6->nt_tport = tport;
+		con_ipv6->nt_oport = oport;
+		memcpy(&con_ipv6->nt_taddr, taddr, sizeof(npf_addr_t));
+		memcpy(&con_ipv6->nt_oaddr, oaddr, sizeof(npf_addr_t));
+		con_ipv6->nt_type = npf_nat_type(nt);
 	}
 
 	/* Construct a "backwards" key. */
