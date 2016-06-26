@@ -1,1 +1,1 @@
-../../kern/npf.h
+#include "../../kern/npf.h"

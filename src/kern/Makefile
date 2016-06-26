@@ -3,7 +3,8 @@
 # This file is in the Public Domain.
 #
 
-CFLAGS=		-std=gnu99 -O2 -flto -g -Wall -Wextra -Werror
+CFLAGS=		-std=gnu99 -O2 -Wall -Wextra -Werror
+CFLAGS+=	-flto
 CFLAGS+=	-Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 CFLAGS+=	-I stand -D_NPF_STANDALONE #-DUSE_JUDY
 CFLAGS+=	-D__RCSID\(x\)=
@@ -11,9 +12,9 @@ CFLAGS+=	-D__RCSID\(x\)=
 CFLAGS+=	-Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 CFLAGS+=	-Wno-unused
 
-CFLAGS+=	-DALEXK_DEBUG
-CFLAGS+=	-DALEXK_DEBUG2
-CFLAGS+=	-DALEXK_DEBUG3
+#CFLAGS+=	-DALEXK_DEBUG
+#CFLAGS+=	-DALEXK_DEBUG2
+#CFLAGS+=	-DALEXK_DEBUG3
 
 # CFLAGS+=        -DNPF_SPINLOCK
 
@@ -33,6 +34,7 @@ LDFLAGS=	-flto
 
 # debug
 CFLAGS+=	-fno-omit-frame-pointer
+#CFLAGS+=	-g -ggdb
 
 endif
 LDFLAGS+=	-lpthread -lpcap -lqsbr -lcdb -lprop -lbpfjit
@@ -52,7 +54,8 @@ endif
 ###
 ### CPP
 ###
-CPPFLAGS=	-std=c++11 -O2 -flto -g -Wall -Wextra -Werror
+CPPFLAGS=	-std=c++11 -O2 -Wall -Wextra -Werror
+CPPFLAGS+=	-flto
 CPPFLAGS+=	-Wpointer-arith
 CPPFLAGS+=	-I stand -D_NPF_STANDALONE #-DUSE_JUDY
 CPPFLAGS+=	-D__RCSID\(x\)=
@@ -60,9 +63,13 @@ CPPFLAGS+=	-D__RCSID\(x\)=
 CPPFLAGS+=	-Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 CPPFLAGS+=	-Wno-unused
 
-CPPFLAGS+=	-DALEXK_DEBUG
-CPPFLAGS+=	-DALEXK_DEBUG2
-CFLAGS+=	-DALEXK_DEBUG3
+# debug information
+#CPPFLAGS+=	-g -ggdb
+#LDFLAGS+=	-g -ggdb
+
+#CPPFLAGS+=	-DALEXK_DEBUG
+#CPPFLAGS+=	-DALEXK_DEBUG2
+#CFLAGS+=	-DALEXK_DEBUG3
 
 #
 # WARNING: All symbols must be hidden by default to not conflict with
@@ -74,11 +81,8 @@ CPPFLAGS+=	-D_NPF_TESTING
 else
 CPPFLAGS+=	-fvisibility=hidden
 CPPFLAGS+=	-DNDEBUG
-#LDFLAGS=	-flto
 endif
-#LDFLAGS+=	-lpthread -lpcap -lqsbr -lcdb -lprop -lbpfjit
 ifeq ($(SYSNAME),Linux)
-#LDFLAGS+=	-ljemalloc #-lJudy
 endif
 
 #

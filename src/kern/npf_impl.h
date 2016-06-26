@@ -422,6 +422,8 @@ void		npf_nat_export(prop_dictionary_t, npf_nat_t *);
 npf_nat_t *	npf_nat_import(npf_t *, prop_dictionary_t, npf_ruleset_t *,
 		    npf_conn_t *);
 
+int npf_nat_type(npf_nat_t *);
+
 /* ALG interface. */
 void		npf_alg_init(npf_t *);
 void		npf_alg_fini(npf_t *);

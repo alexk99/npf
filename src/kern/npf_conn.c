@@ -682,11 +682,12 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 	u_int key_nwords;
 	uint32_t *bk, *fw;
 	npf_conn_t *ret __diagused;
-	npf_addr_t *taddr;
-	in_port_t tport;
+	npf_addr_t *taddr, *oaddr;
+	in_port_t tport, oport;
 	u_int tidx;
 
 	npf_nat_gettrans(nt, &taddr, &tport);
+	npf_nat_getorig(nt, &oaddr, &oport);
 	KASSERT(ntype == NPF_NATOUT || ntype == NPF_NATIN);
 	tidx = nat_type_dimap[ntype];
 
@@ -695,6 +696,13 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 		fw = &con_ipv4->c_forw_entry.ck_key[0];
 		bk = &con_ipv4->c_back_entry.ck_key[0];
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
+
+		/* nat */
+		con_ipv4->nt_tport = tport;
+		con_ipv4->nt_oport = oport;
+		con_ipv4->nt_taddr = taddr->word32[0];
+		con_ipv4->nt_oaddr = oaddr->word32[0];
+		con_ipv4->nt_type = npf_nat_type(nt);
 	}
 	else {
 		npf_conn_ipv6_t * con_ipv6 = (npf_conn_ipv6_t*) con;

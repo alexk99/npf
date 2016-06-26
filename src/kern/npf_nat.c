@@ -90,11 +90,13 @@ __KERNEL_RCSID(0, "$NetBSD: npf_nat.c,v 1.39 2014/12/30 19:11:44 christos Exp $"
 #include <netinet/in.h>
 #endif
 
-#include "npf_impl.h"
-#include "npf_conn.h"
 #include "npf_portmap.h"
 #include "npf_stand.h"
-#include "likely.h"
+#include "npf.h"
+#include "stand/likely.h"
+
+#define __NPF_CONN_PRIVATE
+#include "npf_conn.h"
 
 /*
  * NAT policy structure.
@@ -302,6 +304,11 @@ npf_nat_freepolicy(npf_natpolicy_t *np)
 
 	npf_lock_destroy(&np->n_lock);
 	kmem_free(np, sizeof(npf_natpolicy_t));
+}
+
+int npf_nat_type(npf_nat_t *nat)
+{
+	return nat->nt_natpolicy->n_type;
 }
 
 void
@@ -591,11 +598,11 @@ out:
  * npf_nat_translate: perform translation given the state data.
  */
 static inline int
-npf_nat_translate(npf_cache_t *npc, npf_nat_t *nt, bool forw)
+npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 {
-	const npf_natpolicy_t *np = nt->nt_natpolicy;
-	const u_int which = npf_nat_which(np->n_type, forw);
-	const npf_addr_t *addr;
+	int nt_type;
+	npf_addr_t addr;
+	npf_addr_t *p_addr;
 	in_port_t port;
 
 	KASSERT(npf_iscached(npc, NPC_IP46));
@@ -603,25 +610,54 @@ npf_nat_translate(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 
 	if (forw) {
 		/* "Forwards" stream: use translation address/port. */
-		addr = &nt->nt_taddr;
-		port = nt->nt_tport;
+		if (likely(con->c_flags & CONN_IPV4)) {
+			/* ipv4 */
+			npf_conn_ipv4_t *con_ipv4 = (npf_conn_ipv4_t *) con;
+			addr.word32[0] = con_ipv4->nt_taddr;
+			p_addr = &addr;
+			port = con_ipv4->nt_tport;
+			nt_type = con_ipv4->nt_type;
+		}
+		else {
+			/* ipv6 */
+			npf_conn_ipv6_t *con_ipv6 = (npf_conn_ipv6_t *) con;
+			p_addr = &con_ipv6->nt_taddr;
+			port = con_ipv6->nt_tport;
+			nt_type = con_ipv6->nt_type;
+		}
 	} else {
 		/* "Backwards" stream: use original address/port. */
-		addr = &nt->nt_oaddr;
-		port = nt->nt_oport;
+		if (likely(con->c_flags & CONN_IPV4)) {
+			/* ipv4 */
+			npf_conn_ipv4_t *con_ipv4 = (npf_conn_ipv4_t *) con;
+			addr.word32[0] = con_ipv4->nt_oaddr;
+			p_addr = &addr;
+			port = con_ipv4->nt_oport;
+			nt_type = con_ipv4->nt_type;
+		}
+		else {
+			/* ipv6 */
+			npf_conn_ipv6_t *con_ipv6 = (npf_conn_ipv6_t *) con;
+			p_addr = &con_ipv6->nt_oaddr;
+			port = con_ipv6->nt_oport;
+			nt_type = con_ipv6->nt_type;
+		}
 	}
+
+	const u_int which = npf_nat_which(nt_type, forw);
+
 	KASSERT((np->n_flags & NPF_NAT_PORTS) != 0 || port == 0);
 
 	/* Execute ALG translation first. */
-	if ((npc->npc_info & NPC_ALG_EXEC) == 0) {
+	if (unlikely((npc->npc_info & NPC_ALG_EXEC) == 0)) {
 		npc->npc_info |= NPC_ALG_EXEC;
-		npf_alg_exec(npc, nt, forw);
+		npf_alg_exec(npc, con->c_nat, forw);
 		npf_recache(npc);
 	}
 	KASSERT(!nbuf_flag_p(npc->npc_nbuf, NBUF_DATAREF_RESET));
 
 	/* Finally, perform the translation. */
-	return npf_napt_rwr(npc, which, addr, port);
+	return npf_napt_rwr(npc, which, p_addr, port);
 }
 
 /*
@@ -668,7 +704,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	bool forw;
 
 	/* All relevant IPv4 data should be already cached. */
-	if (!npf_iscached(npc, NPC_IP46) || !npf_iscached(npc, NPC_LAYER4)) {
+	if (unlikely(!npf_iscached(npc, NPC_IP46) || !npf_iscached(npc, NPC_LAYER4))) {
 		return 0;
 	}
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
@@ -678,8 +714,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	 * Determines whether the stream is "forwards" or "backwards".
 	 * Note: no need to lock, since reference on connection is held.
 	 */
-	if (con && (nt = npf_conn_getnat(con, di, &forw)) != NULL) {
-		np = nt->nt_natpolicy;
+	if (likely(con && (nt = npf_conn_getnat(con, di, &forw)) != NULL)) {
 		dprintf("nat_entry is found. goto translate\n");
 		goto translate;
 	}
@@ -715,7 +750,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	 * Note that it is not a "pass" connection, therefore passing of
 	 * "backwards" stream depends on other, stateless filtering rules.
 	 */
-	if (con == NULL) {
+	if (unlikely(con == NULL)) {
 		ncon = npf_conn_establish(npc, di, true);
 		if (ncon == NULL) {
 			atomic_dec_uint(&np->n_refcnt);
@@ -730,7 +765,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	 * We will consume the reference on success (release on error).
 	 */
 	nt = npf_nat_create(npc, np, con);
-	if (nt == NULL) {
+	if (unlikely(nt == NULL)) {
 		atomic_dec_uint(&np->n_refcnt);
 		dprintf2("nat err3\n");
 		error = ENOMEM;
@@ -739,7 +774,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 
 	/* Associate the NAT translation entry with the connection. */
 	error = npf_conn_setnat(npc, con, nt, np->n_type);
-	if (error) {
+	if (unlikely(error)) {
 		/* Will release the reference. */
 		npf_nat_destroy(npc->npc_ctx, nt);
 		dprintf2("nat err4\n");
@@ -753,14 +788,14 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 
 translate:
 	/* May need to process the delayed checksums first (XXX: NetBSD). */
-	if (nbuf_cksum_barrier(nbuf, di)) {
+	if (unlikely(nbuf_cksum_barrier(nbuf, di))) {
 		npf_recache(npc);
 	}
 
 	/* Perform the translation. */
-	error = npf_nat_translate(npc, nt, forw);
+	error = npf_nat_translate(npc, con, forw);
 out:
-	if (__predict_false(ncon)) {
+	if (unlikely(ncon)) {
 		if (error) {
 			/* It created for NAT - just expire. */
 			npf_conn_expire(ncon);

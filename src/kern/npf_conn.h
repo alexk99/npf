@@ -107,6 +107,13 @@ struct npf_conn {
 
 struct npf_conn_ipv4 {
 	struct npf_conn conn;
+
+	/* nat */
+	in_addr_t		nt_oaddr;
+	in_addr_t		nt_taddr;
+	in_port_t	nt_oport;
+	in_port_t	nt_tport;
+	int nt_type;
 	
 	/*
 	 * Connection "forwards" and "backwards" entries
@@ -117,6 +124,13 @@ struct npf_conn_ipv4 {
 
 struct npf_conn_ipv6 {
 	struct npf_conn conn;
+
+	/* nat */
+	npf_addr_t		nt_oaddr;
+	npf_addr_t		nt_taddr;
+	in_port_t	nt_oport;
+	in_port_t	nt_tport;
+	int nt_type;
 	
 	/*
 	 * Connection "forwards" and "backwards" entries

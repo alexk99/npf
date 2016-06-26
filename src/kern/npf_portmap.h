@@ -19,6 +19,8 @@ extern "C" {
 #endif
 
 #include "stdbool.h"
+#include "sys/types.h"
+#include "stdint.h"
 	
 #define NPF_PORTMAP_MAX_ENTRIES 4096	
 	
