@@ -601,8 +601,7 @@ static inline int
 npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 {
 	int nt_type;
-	npf_addr_t addr;
-	npf_addr_t *p_addr;
+	uint32_t* addr;
 	in_port_t port;
 
 	KASSERT(npf_iscached(npc, NPC_IP46));
@@ -613,15 +612,14 @@ npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 		if (likely(con->c_flags & CONN_IPV4)) {
 			/* ipv4 */
 			npf_conn_ipv4_t *con_ipv4 = (npf_conn_ipv4_t *) con;
-			addr.word32[0] = con_ipv4->nt_taddr;
-			p_addr = &addr;
+			addr = &con_ipv4->nt_taddr;
 			port = con_ipv4->nt_tport;
 			nt_type = con_ipv4->nt_type;
 		}
 		else {
 			/* ipv6 */
 			npf_conn_ipv6_t *con_ipv6 = (npf_conn_ipv6_t *) con;
-			p_addr = &con_ipv6->nt_taddr;
+			addr = &con_ipv6->nt_taddr.word32[0];
 			port = con_ipv6->nt_tport;
 			nt_type = con_ipv6->nt_type;
 		}
@@ -630,15 +628,14 @@ npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 		if (likely(con->c_flags & CONN_IPV4)) {
 			/* ipv4 */
 			npf_conn_ipv4_t *con_ipv4 = (npf_conn_ipv4_t *) con;
-			addr.word32[0] = con_ipv4->nt_oaddr;
-			p_addr = &addr;
+			addr = &con_ipv4->nt_oaddr;
 			port = con_ipv4->nt_oport;
 			nt_type = con_ipv4->nt_type;
 		}
 		else {
 			/* ipv6 */
 			npf_conn_ipv6_t *con_ipv6 = (npf_conn_ipv6_t *) con;
-			p_addr = &con_ipv6->nt_oaddr;
+			addr = &con_ipv6->nt_oaddr.word32[0];
 			port = con_ipv6->nt_oport;
 			nt_type = con_ipv6->nt_type;
 		}
@@ -657,7 +654,7 @@ npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 	KASSERT(!nbuf_flag_p(npc->npc_nbuf, NBUF_DATAREF_RESET));
 
 	/* Finally, perform the translation. */
-	return npf_napt_rwr(npc, which, p_addr, port);
+	return npf_napt_rwr(npc, which, addr, port);
 }
 
 /*
@@ -675,7 +672,7 @@ npf_nat_algo(npf_cache_t *npc, const npf_natpolicy_t *np, bool forw)
 		    np->n_tmask, np->n_npt66_adj);
 		break;
 	default:
-		error = npf_napt_rwr(npc, which, &np->n_taddr, np->n_tport);
+		error = npf_napt_rwr(npc, which, &np->n_taddr.word32[0], np->n_tport);
 		break;
 	}
 
@@ -754,7 +751,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 		ncon = npf_conn_establish(npc, di, true);
 		if (ncon == NULL) {
 			atomic_dec_uint(&np->n_refcnt);
-			dprintf2("nat err2\n");
+			dprintf("nat err ENOMEM\n");
 			return ENOMEM;
 		}
 		con = ncon;

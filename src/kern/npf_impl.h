@@ -285,19 +285,19 @@ bool		npf_pfil_registered_p(void);
 int		npf_cache_all(npf_cache_t *);
 void		npf_recache(npf_cache_t *);
 
-bool		npf_rwrip(const npf_cache_t *, u_int, const npf_addr_t *);
+bool		npf_rwrip(const npf_cache_t *, u_int, const uint32_t *);
 bool		npf_rwrport(const npf_cache_t *, u_int, const in_port_t);
 bool		npf_rwrcksum(const npf_cache_t *, u_int,
-		    const npf_addr_t *, const in_port_t);
-int		npf_napt_rwr(const npf_cache_t *, u_int, const npf_addr_t *,
+		    const uint32_t *, const in_port_t);
+int		npf_napt_rwr(const npf_cache_t *, u_int, const uint32_t *,
 		    const in_addr_t);
 int		npf_npt66_rwr(const npf_cache_t *, u_int, const npf_addr_t *,
 		    npf_netmask_t, uint16_t);
 
 uint16_t	npf_fixup16_cksum(uint16_t, uint16_t, uint16_t);
 uint16_t	npf_fixup32_cksum(uint16_t, uint32_t, uint32_t);
-uint16_t	npf_addr_cksum(uint16_t, int, const npf_addr_t *,
-		    const npf_addr_t *);
+uint16_t	npf_addr_cksum(uint16_t, int, const uint32_t *,
+		    const uint32_t *);
 uint32_t	npf_addr_mix(const int, const npf_addr_t *, const npf_addr_t *);
 int		npf_addr_cmp(const npf_addr_t *, const npf_netmask_t,
 		    const npf_addr_t *, const npf_netmask_t, const int);

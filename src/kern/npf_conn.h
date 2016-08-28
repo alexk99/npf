@@ -64,6 +64,9 @@ typedef struct npf_connkey_ipv6 npf_connkey_ipv6_t;
 struct npf_conn {
 	npf_lock_t		c_lock;
 
+	/* Flags */
+	u_int			c_flags;
+	
 	/* It's the first 32 bits of forward key hash value.
 	 * Particial key is used to determine the direction of a connection
 	 * by its key hash value. Since always two keys lead to a single connection
@@ -94,9 +97,6 @@ struct npf_conn {
 	/* Interface ID (if zero, then the state is global) */
 	u_int			c_ifid;
 
-	/* Flags */
-	u_int			c_flags;
-	
 	/* Associated rule procedure or NAT (if any). */
 	npf_nat_t *		c_nat;
 	npf_rproc_t *		c_rproc;

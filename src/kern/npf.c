@@ -119,8 +119,8 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 	npf_alg_init(npf);
 	npf_ext_init(npf);
 
-#ifdef ALEXK_DEBUG3
 	g_log_func = log_func;
+#ifdef ALEXK_DEBUG3
 	g_debug_counter = 0;
 #endif /* ALEXK_DEBUG3 */
 

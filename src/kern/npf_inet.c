@@ -106,15 +106,12 @@ npf_fixup32_cksum(uint16_t cksum, uint32_t odatum, uint32_t ndatum)
  * npf_addr_cksum: calculate checksum of the address, either IPv4 or IPv6.
  */
 uint16_t
-npf_addr_cksum(uint16_t cksum, int sz, const npf_addr_t *oaddr,
-    const npf_addr_t *naddr)
+npf_addr_cksum(uint16_t cksum, int sz, const uint32_t *oaddr,
+    const uint32_t *naddr)
 {
-	const uint32_t *oip32 = (const uint32_t *)oaddr;
-	const uint32_t *nip32 = (const uint32_t *)naddr;
-
 	KASSERT(sz % sizeof(uint32_t) == 0);
 	do {
-		cksum = npf_fixup32_cksum(cksum, *oip32++, *nip32++);
+		cksum = npf_fixup32_cksum(cksum, *oaddr++, *naddr++);
 		sz -= sizeof(uint32_t);
 	} while (sz);
 
@@ -536,7 +533,7 @@ npf_recache(npf_cache_t *npc)
  * npf_rwrip: rewrite required IP address.
  */
 bool
-npf_rwrip(const npf_cache_t *npc, u_int which, const npf_addr_t *addr)
+npf_rwrip(const npf_cache_t *npc, u_int which, const uint32_t *addr)
 {
 	KASSERT(npf_iscached(npc, NPC_IP46));
 	KASSERT(which == NPF_SRC || which == NPF_DST);
@@ -575,9 +572,9 @@ npf_rwrport(const npf_cache_t *npc, u_int which, const in_port_t port)
  */
 bool
 npf_rwrcksum(const npf_cache_t *npc, u_int which,
-    const npf_addr_t *addr, const in_port_t port)
+    const uint32_t *addr, const in_port_t port)
 {
-	const npf_addr_t *oaddr = npc->npc_ips[which];
+	const uint32_t *oaddr = (const uint32_t *) npc->npc_ips[which];
 	const int proto = npc->npc_proto;
 	const int alen = npc->npc_alen;
 	uint16_t *ocksum;
@@ -642,7 +639,7 @@ npf_rwrcksum(const npf_cache_t *npc, u_int which,
  */
 int
 npf_napt_rwr(const npf_cache_t *npc, u_int which,
-    const npf_addr_t *addr, const in_addr_t port)
+    const uint32_t *addr, const in_addr_t port)
 {
 	const unsigned proto = npc->npc_proto;
 

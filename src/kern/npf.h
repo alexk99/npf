@@ -80,7 +80,8 @@ typedef uint8_t			npf_netmask_t;
 #define	NPF_BPF_NWORDS		3
 
 /**/
-#define NPF_CONN_MAP_IPV4_SIZE 1048576 * 4
+#define NPF_CONN_MAP_IPV4_SIZE 1048576 * 4 * 8
+
 /**/
 #define NPF_CONN_MAP_IPV6_SIZE 512 * 4
 

@@ -165,18 +165,18 @@ yyerror(const char *fmt, ...)
 %token	<str>		TABLE_ID
 %token	<str>		VAR_ID
 
-%type	<str>		addr, some_name, table_store
-%type	<str>		proc_param_val, opt_apply, ifname, on_ifname, ifref
-%type	<num>		port, opt_final, number, afamily, opt_family
-%type	<num>		block_or_pass, rule_dir, group_dir, block_opts
-%type	<num>		opt_stateful, icmp_type, table_type
-%type	<num>		map_sd, map_algo, map_type
-%type	<var>		ifaddrs, addr_or_ifaddr, port_range, icmp_type_and_code
-%type	<var>		filt_addr, addr_and_mask, tcp_flags, tcp_flags_and_mask
-%type	<var>		procs, proc_call, proc_param_list, proc_param
-%type	<var>		element, list_elems, list, value
+%type	<str>		addr some_name table_store
+%type	<str>		proc_param_val opt_apply ifname on_ifname ifref
+%type	<num>		port opt_final number afamily opt_family
+%type	<num>		block_or_pass rule_dir group_dir block_opts
+%type	<num>		opt_stateful icmp_type table_type
+%type	<num>		map_sd map_algo map_type
+%type	<var>		ifaddrs addr_or_ifaddr port_range icmp_type_and_code
+%type	<var>		filt_addr addr_and_mask tcp_flags tcp_flags_and_mask
+%type	<var>		procs proc_call proc_param_list proc_param
+%type	<var>		element list_elems list value
 %type	<addrport>	mapseg
-%type	<filtopts>	filt_opts, all_or_filt_opts
+%type	<filtopts>	filt_opts all_or_filt_opts
 %type	<optproto>	opt_proto
 %type	<rulegroup>	group_opts
 %type	<tf>		onoff

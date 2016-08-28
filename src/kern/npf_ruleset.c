@@ -83,9 +83,9 @@ struct npf_rule {
 
 	/* Code to process, if any. */
 	int			r_type;
+	u_int			r_clen;
 	bpfjit_func_t		r_jcode;
 	void *			r_code;
-	u_int			r_clen;
 
 	/* NAT policy (optional), rule procedure and subset. */
 	npf_natpolicy_t *	r_natp;

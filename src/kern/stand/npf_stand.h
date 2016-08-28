@@ -86,13 +86,13 @@
 // #undef NPF_SPINLOCK
 
 #ifdef NPF_SPINLOCK
-#define	npf_lock_t		pthread_spinlock_t 
+#define	npf_lock_t		pthread_spinlock_t
 #define	npf_lock_init(l, i, x)	pthread_spin_init(l, PTHREAD_PROCESS_PRIVATE)
 #define	npf_lock_enter(l)		pthread_spin_lock(l)
 #define	npf_lock_exit(l)		pthread_spin_unlock(l)
 #define	npf_lock_owned(l)		true
 #define	npf_lock_destroy(l)	pthread_spin_destroy(l)
-#else 
+#else
 /* MUTEX */
 #define	npf_lock_t		pthread_mutex_t
 #define	npf_lock_init(l, t)	pthread_mutex_init(l, NULL)
@@ -141,7 +141,7 @@ typedef qsbr_t *		pserialize_t;
 static inline void
 npfkern_qsbr_wait(qsbr_t *qsbr)
 {
-	const struct timespec dtime = { 0, 1 * 1000 * 1000 }; /* 1 ms */
+	const struct timespec dtime = { 0, 1 * 1000 * 10 }; /* 0.01 ms */
 	qsbr_epoch_t target = qsbr_barrier(qsbr);
 
 	while (!qsbr_sync(qsbr, target)) {

@@ -165,7 +165,8 @@ npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
 	}
 	else {
 		uint32_t particial_hv = (uint32_t) hv & 0xFFFFFFFF;
-		*forw = (con->c_forw_entry_particial_hash == particial_hv);
+		bool b = (con->c_forw_entry_particial_hash == particial_hv);
+		*forw = b;
 	}
 
 	return con;

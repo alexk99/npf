@@ -155,6 +155,10 @@ npf_conn_init(npf_t *npf, int flags)
 	if ((flags & NPF_NO_GC) == 0) {
 		npf_worker_register(npf, npf_conn_worker);
 	}
+
+	printf("conn ipv4 size %zu", sizeof(npf_conn_ipv4_t));
+	printf("struct npf_conn %zu", sizeof(struct npf_conn));
+	printf("npf_connkey_ipv4_t %zu", sizeof(npf_connkey_ipv4_t));
 }
 
 void
@@ -474,8 +478,9 @@ npf_conn_inspect(npf_cache_t *npc, const int di, int *error)
 	return con;
 }
 
-/* todo debug remove */
+#ifdef ALEXK_DEBUG3
 extern uint64_t g_debug_counter;
+#endif /* ALEXK_DEBUG3 */
 
 /*
  * npf_conn_establish: create a new connection, insert into the global list.
@@ -498,7 +503,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
 
 	if (__predict_false(!npf_conn_trackable_p(npc))) {
-	   dprintf2("conn is not trackable\n");
+	   printf("conn is not trackable\n");
 		return NULL;
 	}
 
@@ -521,7 +526,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	con = pool_cache_get(con_pool, PR_NOWAIT);
 	if (__predict_false(!con)) {
 		npf_worker_signal(npf);
-		dprintf2("no free pool entries\n");
+		printf("no free pool entries\n");
 		return NULL;
 	}
 	NPF_PRINTF(("NPF: create conn %p\n", con));
@@ -535,7 +540,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	/* Initialize the protocol state. */
 	if (__predict_false(!npf_state_init(npc, &con->c_state))) {
 		npf_conn_destroy(npf, con);
-		dprintf2("conn_establish failed 3\n");
+		npf_log("npf_conn_establish() failed: state_init() failed");
 		return NULL;
 	}
 
@@ -565,7 +570,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	if (__predict_false(!npf_conn_conkey(npc, fw, true) ||
 	    !npf_conn_conkey(npc, bk, false))) {
 		npf_conn_destroy(npf, con);
-		dprintf2("conn_establish failed 4\n");
+		npf_log("npf_conn_establish() failed: could not create a connection key");
 		return NULL;
 	}
 
@@ -619,7 +624,7 @@ err:
 	if (__predict_false(error)) {
 		atomic_or_uint(&con->c_flags, CONN_REMOVED | CONN_EXPIRE);
 		npf_stats_inc(npf, NPF_STAT_RACE_CONN);
-		dprintf("conn_establish error\n");
+		npf_log("npf_conn_establish() failed: error = %d", error);
 	}
 	else {
 		dprintf("conn_establish success\n");

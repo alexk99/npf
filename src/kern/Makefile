@@ -3,7 +3,7 @@
 # This file is in the Public Domain.
 #
 
-CFLAGS=		-std=gnu99 -O2 -Wall -Wextra -Werror
+CFLAGS=		-std=gnu99 -O3 -Wall -Wextra -Werror
 CFLAGS+=	-flto
 CFLAGS+=	-Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 CFLAGS+=	-I stand -D_NPF_STANDALONE #-DUSE_JUDY
@@ -14,7 +14,7 @@ CFLAGS+=	-Wno-unused
 
 #CFLAGS+=	-DALEXK_DEBUG
 #CFLAGS+=	-DALEXK_DEBUG2
-#CFLAGS+=	-DALEXK_DEBUG3
+CFLAGS+=	-DALEXK_DEBUG3
 
 # CFLAGS+=        -DNPF_SPINLOCK
 
@@ -34,7 +34,7 @@ LDFLAGS=	-flto
 
 # debug
 CFLAGS+=	-fno-omit-frame-pointer
-#CFLAGS+=	-g -ggdb
+#CFLAGS+=	-g
 
 endif
 LDFLAGS+=	-lpthread -lpcap -lqsbr -lcdb -lprop -lbpfjit
@@ -54,7 +54,7 @@ endif
 ###
 ### CPP
 ###
-CPPFLAGS=	-std=c++11 -O2 -Wall -Wextra -Werror
+CPPFLAGS=	-std=c++11 -O3 -Wall -Wextra -Werror
 CPPFLAGS+=	-flto
 CPPFLAGS+=	-Wpointer-arith
 CPPFLAGS+=	-I stand -D_NPF_STANDALONE #-DUSE_JUDY
@@ -64,12 +64,12 @@ CPPFLAGS+=	-Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 CPPFLAGS+=	-Wno-unused
 
 # debug information
-#CPPFLAGS+=	-g -ggdb
-#LDFLAGS+=	-g -ggdb
+#CPPFLAGS+=	-g
+#LDFLAGS+=	-g
 
 #CPPFLAGS+=	-DALEXK_DEBUG
 #CPPFLAGS+=	-DALEXK_DEBUG2
-#CFLAGS+=	-DALEXK_DEBUG3
+CFLAGS+=	-DALEXK_DEBUG3
 
 #
 # WARNING: All symbols must be hidden by default to not conflict with
