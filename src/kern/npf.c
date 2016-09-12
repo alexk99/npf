@@ -119,7 +119,10 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 	npf_alg_init(npf);
 	npf_ext_init(npf);
 
+#ifdef NPF_LOG_DEBUG
 	g_log_func = log_func;
+#endif
+
 #ifdef NPF_DEBUG_COUNTERS
 	g_debug_counter = 0;
 #endif /* NPF_DEBUG_COUNTERS */

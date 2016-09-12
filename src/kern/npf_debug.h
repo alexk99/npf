@@ -4,7 +4,7 @@
  * and open the template in the editor.
  */
 
-/* 
+/*
  * File:   npf_debug.h
  * Author: alexk
  *
@@ -23,6 +23,13 @@ extern "C" {
 #else
 #define	dprintf(...)
 #endif
+
+#ifdef NPF_LOG_DEBUG
+#define npf_log g_log_func
+#else
+#define	npf_log(...)
+#endif
+
 
 #ifdef ALEXK_DEBUG2
 #define dprintf2(...) printf(__VA_ARGS__)

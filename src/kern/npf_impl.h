@@ -175,9 +175,10 @@ typedef struct {
 log_entry_t;
 
 typedef int (*npf_log_func_t)(char *format, ...);
-npf_log_func_t g_log_func;
 
-#define npf_log g_log_func
+#ifdef NPF_LOG_DEBUG
+npf_log_func_t g_log_func;
+#endif /* NPF_LOG_DEBUG */
 
 struct npf {
 	/* Active NPF configuration. */
@@ -186,7 +187,7 @@ struct npf {
 	npf_config_t *		config;
 
 	__time_t				sec;
-	
+
 	/* BPF byte-code context. */
 	bpf_ctx_t *		bpfctx;
 	const npf_mbufops_t *	mbufops;
@@ -198,7 +199,7 @@ struct npf {
 	volatile int		conn_tracking;
 	npf_lock_t		conn_lock;
 
-	
+
 	npf_conndb_t *		conn_db;
 	pool_cache_t		conn_ipv4_cache;
 	pool_cache_t		conn_ipv6_cache;
@@ -208,7 +209,7 @@ struct npf {
 
 	/* nat portmap hash */
 	npf_portmap_hash_t* nat_portmap_hash;
-	
+
 	/* Interface mapping. */
 	const npf_ifops_t *	ifops;
 	struct npf_ifmap *	ifmap;
