@@ -50,10 +50,10 @@ __KERNEL_RCSID(0, "$NetBSD: npf.c,v 1.22 2014/07/25 08:10:40 dholland Exp $");
 
 #include "stdarg.h"
 
-#ifdef ALEXK_DEBUG3
+#ifdef NPF_DEBUG_COUNTERS
 uint64_t g_debug_counter;
 uint64_t g_conn_map_size;
-#endif /* ALEXK_DEBUG3 */
+#endif /* NPF_DEBUG_COUNTERS */
 
 static npf_t *	npf_kernel_ctx = NULL __read_mostly;
 
@@ -75,7 +75,7 @@ npf_sysfini(void)
 	npf_bpf_sysfini();
 }
 
-#ifdef ALEXK_DEBUG3
+#ifdef NPF_DEBUG_COUNTERS
 __dso_public uint64_t
 npf_get_n_conndb_rbtree_cmp_nodes(npf_t * npf)
 {
@@ -87,7 +87,7 @@ npf_get_conn_map_size(npf_t * npf)
 {
 	return npf_conndb_size(npf->conn_db);
 }
-#endif /* ALEXK_DEBUG3 */
+#endif /* NPF_DEBUG_COUNTERS */
 
 __dso_public npf_t *
 npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
@@ -120,9 +120,9 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 	npf_ext_init(npf);
 
 	g_log_func = log_func;
-#ifdef ALEXK_DEBUG3
+#ifdef NPF_DEBUG_COUNTERS
 	g_debug_counter = 0;
-#endif /* ALEXK_DEBUG3 */
+#endif /* NPF_DEBUG_COUNTERS */
 
 	/* Load an empty configuration. */
 	npf_config_init(npf);

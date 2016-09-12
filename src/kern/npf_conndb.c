@@ -63,8 +63,9 @@ struct npf_conndb {
 	uint32_t		cd_seed;
 };
 
-// debug: todo remove
+#ifdef NPF_DEBUG_COUNTERS
 extern uint64_t g_debug_counter;
+#endif /* NPF_DEBUG_COUNTERS */
 
 /*
  * Note: (node1 < node2) shall return negative.

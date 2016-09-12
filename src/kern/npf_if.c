@@ -116,7 +116,7 @@ npf_ifmap_register(npf_t *npf, const char *ifname)
 	ifnet_t *ifp;
 	if ((ifp = npf->ifops->lookup(ifname)) != NULL) {
 		u_int idx = npf_ifmap_getid(npf, ifp);
-		printf("npf_ifmap_register: %s idx %u\n", ifname, idx);
+		dprintf("npf_ifmap_register: %s idx %u\n", ifname, idx);
 		return idx;
 	}
 
@@ -190,7 +190,7 @@ npf_ifmap_attach(npf_t *npf, ifnet_t *ifp)
 
 	npf_config_enter(npf);
 	i = npf_ifmap_lookup(npf, ifops->getname(ifp));
-	printf("npf_ifmap_attach: setmeta %d\n", i);
+	dprintf("npf_ifmap_attach: setmeta %d\n", i);
 	ifops->setmeta(ifp, (void *)(uintptr_t)i);
 	npf_config_exit(npf);
 }

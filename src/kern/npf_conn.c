@@ -156,9 +156,9 @@ npf_conn_init(npf_t *npf, int flags)
 		npf_worker_register(npf, npf_conn_worker);
 	}
 
-	printf("conn ipv4 size %zu", sizeof(npf_conn_ipv4_t));
-	printf("struct npf_conn %zu", sizeof(struct npf_conn));
-	printf("npf_connkey_ipv4_t %zu", sizeof(npf_connkey_ipv4_t));
+	dprintf("conn ipv4 size %zu\n", sizeof(npf_conn_ipv4_t));
+	dprintf("struct npf_conn %zu\n", sizeof(struct npf_conn));
+	dprintf("npf_connkey_ipv4_t %zu\n", sizeof(npf_connkey_ipv4_t));
 }
 
 void
@@ -478,9 +478,9 @@ npf_conn_inspect(npf_cache_t *npc, const int di, int *error)
 	return con;
 }
 
-#ifdef ALEXK_DEBUG3
+#ifdef NPF_DEBUG_COUNTERS
 extern uint64_t g_debug_counter;
-#endif /* ALEXK_DEBUG3 */
+#endif /* NPF_DEBUG_COUNTERS */
 
 /*
  * npf_conn_establish: create a new connection, insert into the global list.
@@ -503,7 +503,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
 
 	if (__predict_false(!npf_conn_trackable_p(npc))) {
-	   printf("conn is not trackable\n");
+	   dprintf("conn is not trackable\n");
 		return NULL;
 	}
 
