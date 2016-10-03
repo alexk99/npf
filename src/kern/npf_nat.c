@@ -513,7 +513,7 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 	if (nt == NULL){
 		return NULL;
 	}
-	npf_stats_inc(npc->npc_ctx, NPF_STAT_NAT_CREATE);
+	npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_NAT_CREATE);
 	nt->nt_natpolicy = np;
 	nt->nt_conn = con;
 	nt->nt_alg = NULL;
@@ -773,7 +773,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	error = npf_conn_setnat(npc, con, nt, np->n_type);
 	if (unlikely(error)) {
 		/* Will release the reference. */
-		npf_nat_destroy(npc->npc_ctx, nt);
+		npf_nat_destroy(npc, npc->npc_ctx, nt);
 		dprintf2("nat err4\n");
 		goto out;
 	}
@@ -837,7 +837,7 @@ npf_nat_setalg(npf_nat_t *nt, npf_alg_t *alg, uintptr_t arg)
  * npf_nat_destroy: destroy NAT structure (performed on connection expiration).
  */
 void
-npf_nat_destroy(npf_t *npf, npf_nat_t *nt)
+npf_nat_destroy(npf_cache_t* npc, npf_t *npf, npf_nat_t *nt)
 {
 	npf_natpolicy_t *np = nt->nt_natpolicy;
 
@@ -851,7 +851,7 @@ npf_nat_destroy(npf_t *npf, npf_nat_t *nt)
 		uint32_t translation_ip = nt->nt_taddr.word32[0];
 		npf_portmap_return(npf->nat_portmap_hash, translation_ip);
 	}
-	npf_stats_inc(np->n_npfctx, NPF_STAT_NAT_DESTROY);
+	npf_stats_inc(npf, npc, NPF_STAT_NAT_DESTROY);
 
 	npf_lock_enter(&np->n_lock);
 	LIST_REMOVE(nt, nt_entry);
@@ -886,7 +886,7 @@ npf_nat_export(prop_dictionary_t condict, npf_nat_t *nt)
  * npf_nat_import: find the NAT policy and unserialise the NAT entry.
  */
 npf_nat_t *
-npf_nat_import(npf_t *npf, prop_dictionary_t natdict,
+npf_nat_import(npf_cache_t* npc, npf_t *npf, prop_dictionary_t natdict,
     npf_ruleset_t *natlist, npf_conn_t *con)
 {
 	npf_natpolicy_t *np;
@@ -930,7 +930,7 @@ npf_nat_import(npf_t *npf, prop_dictionary_t natdict,
 		pool_cache_put(nat_cache, nt);
 		return NULL;
 	}
-	npf_stats_inc(npf, NPF_STAT_NAT_CREATE);
+	npf_stats_inc(npf, npc, NPF_STAT_NAT_CREATE);
 
 	/*
 	 * Associate, take a reference and insert.  Unlocked since

@@ -460,6 +460,9 @@ npf_mk_connlist(npf_t *npf, prop_array_t conlist, npf_ruleset_t *natlist,
 	prop_object_iterator_t it;
 	npf_conndb_t *cd;
 	int error = 0;
+	npf_cache_t npc;
+
+	npc.cpu_thread = 0;
 
 	/* Connection list - array */
 	if (prop_object_type(conlist) != PROP_TYPE_ARRAY) {
@@ -478,7 +481,7 @@ npf_mk_connlist(npf_t *npf, prop_array_t conlist, npf_ruleset_t *natlist,
 			break;
 		}
 		/* Construct and insert the connection. */
-		error = npf_conn_import(npf, cd, condict, natlist);
+		error = npf_conn_import(&npc, npf, cd, condict, natlist);
 		if (error) {
 			NPF_ERR_DEBUG(errdict);
 			break;
@@ -486,7 +489,10 @@ npf_mk_connlist(npf_t *npf, prop_array_t conlist, npf_ruleset_t *natlist,
 	}
 	prop_object_iterator_release(it);
 	if (error) {
-		npf_conn_gc(npf, cd, true, false);
+		npf_cache_t npc;
+		npc.cpu_thread = 0;
+
+		npf_conn_gc(&npc, npf, cd, true, false);
 		npf_conndb_destroy(cd);
 	} else {
 		*conndb = cd;

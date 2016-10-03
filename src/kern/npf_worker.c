@@ -50,6 +50,7 @@ typedef struct npf_worker {
 	bool			worker_exit;
 	lwp_t *			worker_lwp;
 	npf_t *			instances;
+	uint8_t		cpu_thread;
 } npf_worker_t;
 
 #define	W_INTERVAL		mstohz(1 * 1000)
@@ -67,6 +68,8 @@ npf_worker_sysinit(unsigned nworkers)
 
 	for (unsigned i = 0; i < nworkers; i++) {
 		npf_worker_t *wrk = &npf_workers[i];
+		// todo
+		wrk->cpu_thread = 0;
 
 		mutex_init(&wrk->worker_lock, MUTEX_DEFAULT, IPL_SOFTNET);
 		cv_init(&wrk->worker_cv, "npfgccv");
@@ -169,6 +172,9 @@ npf_worker(void *arg)
 {
 	unsigned i = (unsigned)(uintptr_t)arg;
 	npf_worker_t *wrk = &npf_workers[i];
+	npf_cache_t npc;
+
+	npc.cpu_thread = wrk->cpu_thread;
 
 	KASSERT(wrk != NULL);
 	KASSERT(!wrk->worker_exit);
@@ -184,7 +190,7 @@ npf_worker(void *arg)
 			/* Run the jobs. */
 			while (i--) {
 				if ((work = wrk->work_funcs[i]) != NULL) {
-					work(npf);
+					work(npf, &npc);
 				}
 			}
 			/* Next .. */

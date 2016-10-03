@@ -106,7 +106,7 @@ typedef struct npf_algset	npf_algset_t;
  * DEFINITIONS.
  */
 
-typedef void (*npf_workfunc_t)(npf_t *);
+typedef void (*npf_workfunc_t)(npf_t *, npf_cache_t *);
 
 #define NPF_PORTMAP_HASH_SIZE 512
 
@@ -157,12 +157,13 @@ typedef struct {
 struct nbuf {
 	struct mbuf *	nb_mbuf0;
 	struct mbuf *	nb_mbuf;
+	uint8_t*    mbuf_data_start;
 	void *		nb_nptr;
 	const ifnet_t *	nb_ifp;
 	unsigned	nb_ifid;
 	int		nb_flags;
 	const npf_mbufops_t *nb_mops;
-	size_t l2_hdr_size;
+	uint8_t l2_hdr_size;
 };
 
 /*
@@ -180,13 +181,13 @@ typedef int (*npf_log_func_t)(char *format, ...);
 npf_log_func_t g_log_func;
 #endif /* NPF_LOG_DEBUG */
 
+#define DEFAULT_STAT_PTR_NUM 4
+
 struct npf {
 	/* Active NPF configuration. */
 	kmutex_t		config_lock;
 	pserialize_t		qsbr;
 	npf_config_t *		config;
-
-	__time_t				sec;
 
 	/* BPF byte-code context. */
 	bpf_ctx_t *		bpfctx;
@@ -224,7 +225,8 @@ struct npf {
 	kmutex_t		ext_lock;
 
 	/* Statistics. */
-	percpu_t *		stats_percpu;
+	uint8_t		stat_num_pointers;
+	uint64_t**	stats_percpu;
 };
 
 /*
@@ -267,8 +269,11 @@ int		npfctl_table(npf_t *, void *);
 
 int npfctl_save_conndb_to_file(npf_t *, const char*);
 
-void		npf_stats_inc(npf_t *, npf_stats_t);
-void		npf_stats_dec(npf_t *, npf_stats_t);
+void
+npf_stats_inc(const npf_t *, const npf_cache_t *npc, npf_stats_t st);
+
+void
+npf_stats_dec(const npf_t *, const npf_cache_t *npc, npf_stats_t st);
 
 void		npf_ifmap_init(npf_t *, const npf_ifops_t *);
 void		npf_ifmap_fini(npf_t *);
@@ -414,14 +419,14 @@ uint64_t	npf_nat_getid(const npf_natpolicy_t *);
 void		npf_nat_freealg(npf_natpolicy_t *, npf_alg_t *);
 
 int		npf_do_nat(npf_cache_t *, npf_conn_t *, const int);
-void		npf_nat_destroy(npf_t *, npf_nat_t *);
+void		npf_nat_destroy(npf_cache_t *, npf_t *, npf_nat_t *);
 void		npf_nat_getorig(npf_nat_t *, npf_addr_t **, in_port_t *);
 void		npf_nat_gettrans(npf_nat_t *, npf_addr_t **, in_port_t *);
 void		npf_nat_setalg(npf_nat_t *, npf_alg_t *, uintptr_t);
 
 void		npf_nat_export(prop_dictionary_t, npf_nat_t *);
-npf_nat_t *	npf_nat_import(npf_t *, prop_dictionary_t, npf_ruleset_t *,
-		    npf_conn_t *);
+npf_nat_t *	npf_nat_import(npf_cache_t *, npf_t *, prop_dictionary_t,
+		  npf_ruleset_t *, npf_conn_t *);
 
 int npf_nat_type(npf_nat_t *);
 

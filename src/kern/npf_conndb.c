@@ -139,6 +139,20 @@ npf_conndb_hash(npf_conndb_t* cd, const void* key, const u_int key_nwords)
 }
 
 /*
+ * Returns the size of the conn map
+ */
+uint64_t
+npf_conndb_size(npf_conndb_t* cd, const u_int key_nwords)
+{
+	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
+		return npf_conn_map_size(cd->conn_map_ipv4);
+	}
+	else {
+		return npf_conn_map_ipv6_size(cd->conn_map_ipv6);
+	}
+}
+
+/*
  * npf_conndb_lookup: find a connection given the key.
  */
 npf_conn_t *
@@ -174,6 +188,50 @@ npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
 }
 
 /*
+ * npf_conndb_lookup: find a connection given the key.
+ */
+npf_conn_t *
+npf_conndb_lookup_only(npf_conndb_t *cd, const void *key, const u_int key_nwords,
+		  uint64_t* out_hv)
+{
+	npf_conn_t* con;
+	const uint64_t hv = npf_conndb_hash(cd, key, key_nwords);
+
+	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
+		con = (npf_conn_t*) npf_conn_map_lookup(cd->conn_map_ipv4, key, hv);
+	}
+	else {
+		con = (npf_conn_t*) npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key, hv);
+	}
+
+	if (con == NULL) {
+		return NULL;
+	}
+
+	*out_hv = hv;
+	return con;
+}
+
+/*
+ *
+ */
+bool
+npf_conndb_forw(npf_conn_t* con, const void *key, const u_int key_nwords,
+		  const uint64_t hv)
+{
+	/* determine forw */
+	if (unlikely(con->c_flags & CONN_PARTICIAL_HASH_COLLISION)) {
+		/* hash collision, we need to do a real comparing */
+		return (conndb_forw_cmp(con, key, key_nwords) == 0);
+	}
+	else {
+		uint32_t particial_hv = (uint32_t) hv & 0xFFFFFFFF;
+		return (con->c_forw_entry_particial_hash == particial_hv);
+	}
+}
+
+
+/*
  * npf_conndb_insert: insert a key representing a connection.
  */
 bool
@@ -205,7 +263,7 @@ npf_conndb_remove(npf_conndb_t *cd, void *key, const u_int key_nwords,
 }
 
 uint64_t
-npf_conndb_size(npf_conndb_t *cd)
+npf_conndb_ipv4_size(npf_conndb_t *cd)
 {
 	return npf_conn_map_size(cd->conn_map_ipv4);
 }

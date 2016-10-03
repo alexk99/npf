@@ -80,18 +80,19 @@ nbuf_init(npf_t *npf, nbuf_t *nbuf, struct mbuf *m, const ifnet_t *ifp)
 }
 
 void
-nbuf_init2(npf_t *npf, nbuf_t *nbuf, struct mbuf *m, size_t l2_hdr_size,
-		  const ifnet_t *ifp)
+nbuf_init2(npf_t *npf, nbuf_t *nbuf, struct mbuf *m, uint8_t l2_hdr_size,
+		  const ifnet_t *ifp, uint8_t* mbuf_data_start)
 {
 	u_int ifid = (uintptr_t) ifp->arg;
 
 	KASSERT(m_flags_p(m, M_PKTHDR));
 	nbuf->nb_mops = npf->mbufops;
-
    nbuf->l2_hdr_size = l2_hdr_size;
 	nbuf->nb_mbuf0 = m;
 	nbuf->nb_ifp = ifp;
 	nbuf->nb_ifid = ifid;
+	nbuf->mbuf_data_start = mbuf_data_start;
+
 	nbuf_reset(nbuf);
 }
 
@@ -100,18 +101,7 @@ nbuf_reset(nbuf_t *nbuf)
 {
 	struct mbuf* m = nbuf->nb_mbuf0;
 	nbuf->nb_mbuf = m;
-
-	size_t l2_hdr_size = nbuf->l2_hdr_size;
-
-	if (__predict_true(l2_hdr_size > 0)) {
-		/* Offset in mbuf data. */
-		uint8_t *d = mtod(m, uint8_t *);
-		d += l2_hdr_size;
-		nbuf->nb_nptr = d;
-	}
-	else {
-		nbuf->nb_nptr = mtod(m, void *);
-	}
+	nbuf->nb_nptr = (void*)(uint8_t*)(nbuf->mbuf_data_start + nbuf->l2_hdr_size);
 }
 
 void *

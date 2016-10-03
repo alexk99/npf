@@ -320,9 +320,9 @@ npf_cache_ip(npf_cache_t *npc, nbuf_t *nbuf)
 
 	switch (ver >> 4) {
 	case IPVERSION: {
-		if (__predict_false(!nbuf_check_ip_hdr_size(nbuf))) {
-			return 0;
-		}
+//		if (__predict_false(!nbuf_check_ip_hdr_size(nbuf))) {
+//			return 0;
+//		}
 
 		struct ip *ip = (struct ip*) nbuf->nb_nptr;
 
@@ -455,6 +455,7 @@ again:
 	 * fragmented, then we cannot look into L4.
 	 */
 	flags = npf_cache_ip(npc, nbuf);
+	//return 0; // return 2.1
 	if ((flags & NPC_IP46) == 0 || (flags & NPC_IPFRAG) != 0) {
 		nbuf_unset_flag(nbuf, NBUF_DATAREF_RESET);
 		npc->npc_info |= flags;

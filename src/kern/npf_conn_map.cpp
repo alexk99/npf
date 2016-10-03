@@ -69,13 +69,14 @@ void *
 npf_conn_map_lookup(void* map, const npf_connkey_ipv4_t *key, const size_t hv)
 {
 	con_map_t* cmap = (con_map_t*) map;
-	
 	void* con;
+	
 	if (!cmap->find(*key, con, hv)) {
 		return NULL;
 	}
-
-	return con;
+	else {
+		return con;
+	}
 }
 
 /*

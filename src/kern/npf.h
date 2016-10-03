@@ -80,7 +80,8 @@ typedef uint8_t			npf_netmask_t;
 #define	NPF_BPF_NWORDS		3
 
 /**/
-#define NPF_CONN_MAP_IPV4_SIZE 1048576 * 4 * 8
+// #define NPF_CONN_MAP_IPV4_SIZE 1048576 * 4 * 8
+#define NPF_CONN_MAP_IPV4_SIZE 1024 * 4 * 8
 
 /**/
 #define NPF_CONN_MAP_IPV6_SIZE 512 * 4
@@ -115,7 +116,8 @@ struct nbuf;
 typedef struct nbuf nbuf_t;
 
 void		nbuf_init(npf_t *, nbuf_t *, struct mbuf *, const ifnet_t *);
-void		nbuf_init2(npf_t *, nbuf_t *, struct mbuf *, size_t, const ifnet_t *);
+void		nbuf_init2(npf_t *, nbuf_t *, struct mbuf *, uint8_t, const ifnet_t *,
+		  uint8_t*);
 
 void		nbuf_reset(nbuf_t *);
 struct mbuf *	nbuf_head_mbuf(nbuf_t *);
@@ -156,23 +158,24 @@ int		nbuf_find_tag(nbuf_t *, uint32_t, void **);
 typedef struct {
 	/* NPF context, information flags and the nbuf. */
 	npf_t *			npc_ctx;
-	uint32_t		npc_info;
-	nbuf_t *		npc_nbuf;
+	nbuf_t *			npc_nbuf;
 
 	/*
 	 * Pointers to the IP source and destination addresses,
 	 * and the address length (4 for IPv4 or 16 for IPv6).
 	 */
-	npf_addr_t *		npc_ips[2];
-	uint8_t			npc_alen;
+	npf_addr_t *	npc_ips[2];
 
+	uint32_t			npc_info;
 	/* IP header length and L4 protocol. */
+	uint16_t			npc_proto;
+	uint8_t			npc_alen;
 	uint8_t			npc_hlen;
-	uint16_t		npc_proto;
+
 
 	/* IPv4, IPv6. */
 	union {
-		struct ip *		v4;
+		struct ip *			v4;
 		struct ip6_hdr *	v6;
 	} npc_ip;
 
@@ -180,10 +183,16 @@ typedef struct {
 	union {
 		struct tcphdr *		tcp;
 		struct udphdr *		udp;
-		struct icmp *		icmp;
+		struct icmp *			icmp;
 		struct icmp6_hdr *	icmp6;
-		void *			hdr;
+		void *					hdr;
 	} npc_l4;
+
+	/**/
+	__time_t						sec;
+
+	/* number of cpu thread (core) */
+	uint8_t						cpu_thread;
 } npf_cache_t;
 
 static inline bool

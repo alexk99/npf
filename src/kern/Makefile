@@ -15,7 +15,7 @@ CFLAGS+=	-Wno-unused
 #CFLAGS+=	-DALEXK_DEBUG
 #CFLAGS+=	-DALEXK_DEBUG2
 #CFLAGS+=	-DALEXK_DEBUG3
-CFLAGS+=        -DNPF_DEBUG_COUNTERS
+#CFLAGS+=        -DNPF_DEBUG_COUNTERS
 
 # CFLAGS+=        -DNPF_SPINLOCK
 
@@ -34,7 +34,7 @@ CFLAGS+=	-DNDEBUG
 LDFLAGS=	-flto
 
 # debug
-CFLAGS+=	-fno-omit-frame-pointer
+#CFLAGS+=	-fno-omit-frame-pointer
 #CFLAGS+=	-g
 
 endif
@@ -56,7 +56,7 @@ endif
 ### CPP
 ###
 CPPFLAGS=	-std=c++11 -O3 -Wall -Wextra -Werror
-CPPFLAGS+=	-flto
+#CPPFLAGS+=	-flto
 CPPFLAGS+=	-Wpointer-arith
 CPPFLAGS+=	-I stand -D_NPF_STANDALONE #-DUSE_JUDY
 CPPFLAGS+=	-D__RCSID\(x\)=
@@ -65,8 +65,8 @@ CPPFLAGS+=	-Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 CPPFLAGS+=	-Wno-unused
 
 # debug information
-#CPPFLAGS+=	-g
-#LDFLAGS+=	-g
+CPPFLAGS+=	-g
+LDFLAGS+=	-g
 
 #CPPFLAGS+=	-DALEXK_DEBUG
 #CPPFLAGS+=	-DALEXK_DEBUG2

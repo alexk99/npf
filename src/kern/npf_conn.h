@@ -66,41 +66,41 @@ struct npf_conn {
 
 	/* Flags */
 	u_int			c_flags;
-	
+
 	/* It's the first 32 bits of forward key hash value.
 	 * Particial key is used to determine the direction of a connection
 	 * by its key hash value. Since always two keys lead to a single connection
 	 * we have to determine which was used to find a connection in a particular
 	 * case. To do that we compare a key hash value with a forward keys hash value.
-	 * If values are equal then the direction is forward. 
-	 * 
+	 * If values are equal then the direction is forward.
+	 *
 	 * It's enought to compare
-	 * only first 32 bits of hash values due to rare hash collisions. 
+	 * only first 32 bits of hash values due to rare hash collisions.
 	 * If a hash collision occurs we have to do the real comparasion by calculating
-	 * full hash value and comparing it with the given key hash value. 
-	 * 
-	 * Since we compare only particial keys hash values the collision flag must 
-	 * be determined by comparing particial values too. Fact of collision 
+	 * full hash value and comparing it with the given key hash value.
+	 *
+	 * Since we compare only particial keys hash values the collision flag must
+	 * be determined by comparing particial values too. Fact of collision
 	 * is stored in CONN_PARTICIAL_HASH_COLLISION bit of the connection c_flag.
 	 */
 	uint32_t				c_forw_entry_particial_hash;
-	
+
 	/*
 	 * The protocol state, reference count and the last activity
 	 * time (used to calculate expiration time).
 	 */
 	npf_state_t		c_state;
 	uint64_t		c_atime;
-	
+
 	u_int			c_proto;
-	
+
 	/* Interface ID (if zero, then the state is global) */
 	u_int			c_ifid;
 
 	/* Associated rule procedure or NAT (if any). */
 	npf_nat_t *		c_nat;
 	npf_rproc_t *		c_rproc;
-	
+
 	/* Entry in the connection database or G/C list. */
 	npf_conn_t *		c_next;
 };
@@ -114,7 +114,7 @@ struct npf_conn_ipv4 {
 	in_port_t	nt_oport;
 	in_port_t	nt_tport;
 	int nt_type;
-	
+
 	/*
 	 * Connection "forwards" and "backwards" entries
 	 */
@@ -131,7 +131,7 @@ struct npf_conn_ipv6 {
 	in_port_t	nt_oport;
 	in_port_t	nt_tport;
 	int nt_type;
-	
+
 	/*
 	 * Connection "forwards" and "backwards" entries
 	 */
@@ -153,8 +153,33 @@ void		npf_conn_tracking(npf_t *, bool);
 void		npf_conn_load(npf_t *, npf_conndb_t *, bool);
 
 unsigned	npf_conn_conkey(const npf_cache_t *, uint32_t *, bool);
-npf_conn_t *	npf_conn_lookup(const npf_cache_t *, const int, bool *);
-npf_conn_t *	npf_conn_inspect(npf_cache_t *, const int, int *);
+
+npf_conn_t *
+npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw);
+
+npf_conn_t *
+npf_conn_lookup_new(const npf_cache_t *npc, const int di, bool *forw);
+
+
+npf_conn_t*
+npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t* con_key,
+		  uint64_t* out_hv);
+
+npf_conn_t *
+npf_conn_lookup_part2(npf_conn_t* con, const npf_cache_t* npc,
+		  const void* key, uint64_t hv, const int di, bool* forw);
+
+npf_conn_t *
+npf_conn_inspect(npf_cache_t *npc, const int di, int *error);
+
+npf_conn_t *
+npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
+		  int* error, uint64_t* out_hv);
+
+npf_conn_t *
+npf_conn_inspect_part2(npf_conn_t* con, npf_cache_t *npc, const void* key,
+		  uint64_t hv, const int di);
+
 npf_conn_t *	npf_conn_establish(npf_cache_t *, int, bool);
 void		npf_conn_release(npf_conn_t *);
 void		npf_conn_expire(npf_conn_t *);
@@ -163,10 +188,10 @@ void		npf_conn_setpass(npf_conn_t *, npf_rproc_t *);
 int		npf_conn_setnat(const npf_cache_t *, npf_conn_t *,
 		    npf_nat_t *, u_int);
 npf_nat_t *	npf_conn_getnat(npf_conn_t *, const int, bool *);
-void		npf_conn_gc(npf_t *, npf_conndb_t *, bool, bool);
-void		npf_conn_worker(npf_t *);
-int		npf_conn_import(npf_t *, npf_conndb_t *, prop_dictionary_t,
-		    npf_ruleset_t *);
+void		npf_conn_gc(npf_cache_t *, npf_t *, npf_conndb_t *, bool, bool);
+void		npf_conn_worker(npf_t *, npf_cache_t *);
+int		npf_conn_import(npf_cache_t *, npf_t *, npf_conndb_t *,
+		  prop_dictionary_t, npf_ruleset_t *);
 prop_dictionary_t npf_conn_export(npf_t *, const npf_conn_t *);
 void		npf_conn_print(const npf_conn_t *);
 
@@ -176,16 +201,32 @@ void		npf_conn_print(const npf_conn_t *);
 npf_conndb_t *	npf_conndb_create(void);
 void		npf_conndb_destroy(npf_conndb_t *);
 
-uint64_t npf_conndb_size(npf_conndb_t *);
+uint64_t npf_conndb_ipv4_size(npf_conndb_t *);
 uint64_t npf_conndb_ipv6_size(npf_conndb_t *);
 
 uint64_t npf_conndb_hash(npf_conndb_t*, const void*, const u_int);
 
-npf_conn_t * npf_conndb_lookup(npf_conndb_t *, const void *, const u_int, bool *);
-bool npf_conndb_insert(npf_conndb_t *, void *, const u_int, uint64_t, npf_conn_t *);
-npf_conn_t * npf_conndb_remove(npf_conndb_t *, void *, const u_int, uint64_t);
+npf_conn_t *
+npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
+		  bool *forw);
 
 npf_conn_t *
+npf_conndb_lookup_only(npf_conndb_t *, const void *, const u_int, uint64_t*);
+
+bool
+npf_conndb_forw(npf_conn_t* con, const void *key, const u_int key_nwords,
+		  const uint64_t hv);
+
+uint64_t
+npf_conndb_size(npf_conndb_t* cd, const u_int key_nwords);
+
+bool
+npf_conndb_insert(npf_conndb_t *, void *, const u_int, uint64_t, npf_conn_t *);
+
+npf_conn_t*
+npf_conndb_remove(npf_conndb_t *, void *, const u_int, uint64_t);
+
+npf_conn_t*
 npf_conndb_count(npf_conndb_t *cd);
 
 
