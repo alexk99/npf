@@ -303,9 +303,10 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 		return 0;
 	}
 
-	if (__predict_true(forw)) {
+	if (likely(forw)) {
 		isrc = NPF_SRC, idst = NPF_DST;
-	} else {
+	}
+	else {
 		isrc = NPF_DST, idst = NPF_SRC;
 	}
 
@@ -324,7 +325,7 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 	key[0] = ((uint32_t)npc->npc_proto << 16) | (alen & 0xffff);
 	key[1] = ((uint32_t)id[isrc] << 16) | id[idst];
 
-	if (__predict_true(alen == sizeof(in_addr_t))) {
+	if (likely(alen == sizeof(in_addr_t))) {
 		key[2] = npc->npc_ips[isrc]->word32[0];
 		key[3] = npc->npc_ips[idst]->word32[0];
 		keylen = 4 * sizeof(uint32_t);
@@ -384,76 +385,10 @@ npf_conn_t *
 npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 {
 	npf_t *npf = npc->npc_ctx;
-	const nbuf_t *nbuf = npc->npc_nbuf;
-	npf_conn_t *con;
-	u_int flags, cifid;
-	bool ok, pforw;
-	/* note: ipv6 key type can be used for both ipv4 and ipv6 connections */
-	npf_connkey_ipv6_t key;
-	uint32_t* k = &key.ck_key[0];
-	u_int key_nwords;
-
-	if (__predict_true(npc->npc_alen == sizeof(in_addr_t))) {
-		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
-	}
-	else {
-		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
-	}
-
-	/* Construct a key and lookup for a connection in the store. */
-	if (__predict_false(!npf_conn_conkey(npc, k, true))) {
-		return NULL;
-	}
-
-	con = npf_conndb_lookup(npf->conn_db, k, key_nwords, forw);
-	if (con == NULL) {
-		return NULL;
-	}
-	KASSERT(npc->npc_proto == con->c_proto);
-
-	/* Check if connection is active and not expired. */
-	flags = con->c_flags;
-	ok = (flags & (CONN_ACTIVE | CONN_EXPIRE)) == CONN_ACTIVE;
-	if (__predict_false(!ok)) {
-		return NULL;
-	}
-
-	/*
-	 * Match the interface and the direction of the connection entry
-	 * and the packet.
-	 */
-	cifid = con->c_ifid;
-	dprintf("c_ifid: c_ifid %d, packet_ifid: %d\n", cifid, nbuf->nb_ifid);
-
-	if (__predict_false(cifid && cifid != nbuf->nb_ifid)) {
-		return NULL;
-	}
-
-	pforw = (flags & PFIL_ALL) == (u_int)di;
-	dprintf("flags %d, di %d, forw %d, pforw %d\n", flags, di, *forw, pforw);
-
-	if (__predict_false(*forw != pforw)) {
-		return NULL;
-	}
-
-	/* Update the last activity time. */
-	conn_update_atime(npc, con);
-	return con;
-}
-
-/*
- * npf_conn_lookup: lookup if there is an established connection.
- *
- * => If found, we will hold a reference for the caller.
- */
-npf_conn_t *
-npf_conn_lookup_new(const npf_cache_t *npc, const int di, bool *forw)
-{
-	npf_t *npf = npc->npc_ctx;
 	npf_conndb_t* conndb = npf->conn_db;
 	u_int key_nwords;
 
-	if (__predict_true(npc->npc_alen == sizeof(in_addr_t))) {
+	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
 	}
 	else {
@@ -469,7 +404,7 @@ npf_conn_lookup_new(const npf_cache_t *npc, const int di, bool *forw)
 	uint32_t* k = &key.ck_key[0];
 
 	/* Construct a key and lookup for a connection in the store. */
-	if (__predict_false(!npf_conn_conkey(npc, k, true))) {
+	if (unlikely(!npf_conn_conkey(npc, k, true))) {
 		return NULL;
 	}
 
@@ -482,7 +417,7 @@ npf_conn_lookup_new(const npf_cache_t *npc, const int di, bool *forw)
 	/* Check if connection is active and not expired. */
 	u_int flags = con->c_flags;
 	bool ok = (flags & (CONN_ACTIVE | CONN_EXPIRE)) == CONN_ACTIVE;
-	if (__predict_false(!ok)) {
+	if (unlikely(!ok)) {
 		return NULL;
 	}
 
@@ -490,18 +425,18 @@ npf_conn_lookup_new(const npf_cache_t *npc, const int di, bool *forw)
 	 * Match the interface and the direction of the connection entry
 	 * and the packet.
 	 */
-	const nbuf_t *nbuf = npc->npc_nbuf;
 	u_int cifid = con->c_ifid;
-	dprintf("c_ifid: c_ifid %d, packet_ifid: %d\n", cifid, nbuf->nb_ifid);
+	uint16_t ifid = npc->ifid;
+	dprintf("c_ifid: c_ifid %d, packet_ifid: %d\n", cifid, ifid);
 
-	if (__predict_false(cifid && cifid != nbuf->nb_ifid)) {
+	if (unlikely(cifid && cifid != ifid)) {
 		return NULL;
 	}
 
 	bool pforw = (flags & PFIL_ALL) == (u_int)di;
 	dprintf("flags %d, di %d, forw %d, pforw %d\n", flags, di, *forw, pforw);
 
-	if (__predict_false(*forw != pforw)) {
+	if (unlikely(*forw != pforw)) {
 		return NULL;
 	}
 
@@ -517,7 +452,7 @@ npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t* con_key, uint64_t* out_h
 	npf_conndb_t* conndb = npf->conn_db;
 	u_int key_nwords;
 
-	if (__predict_true(npc->npc_alen == sizeof(in_addr_t))) {
+	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
 	}
 	else {
@@ -531,7 +466,7 @@ npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t* con_key, uint64_t* out_h
 	npf_conn_t* con;
 
 	/* Construct a key and lookup for a connection in the store. */
-	if (__predict_false(!npf_conn_conkey(npc, con_key, true))) {
+	if (unlikely(!npf_conn_conkey(npc, con_key, true))) {
 		return NULL;
 	}
 
@@ -553,7 +488,7 @@ npf_conn_lookup_part2(npf_conn_t* con, const npf_cache_t* npc,
 		  const void* key, uint64_t hv, const int di, bool* forw)
 {
 	u_int key_nwords;
-	if (__predict_true(npc->npc_alen == sizeof(in_addr_t))) {
+	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
 	}
 	else {
@@ -564,11 +499,10 @@ npf_conn_lookup_part2(npf_conn_t* con, const npf_cache_t* npc,
 
 	KASSERT(npc->npc_proto == con->c_proto);
 
-
 	/* Check if connection is active and not expired. */
 	u_int flags = con->c_flags;
 	bool ok = (flags & (CONN_ACTIVE | CONN_EXPIRE)) == CONN_ACTIVE;
-	if (__predict_false(!ok)) {
+	if (unlikely(!ok)) {
 		return NULL;
 	}
 
@@ -576,18 +510,18 @@ npf_conn_lookup_part2(npf_conn_t* con, const npf_cache_t* npc,
 	 * Match the interface and the direction of the connection entry
 	 * and the packet.
 	 */
-	const nbuf_t *nbuf = npc->npc_nbuf;
 	u_int cifid = con->c_ifid;
-	dprintf("c_ifid: c_ifid %d, packet_ifid: %d\n", cifid, nbuf->nb_ifid);
+	uint16_t ifid = npc->ifid;
+	dprintf("c_ifid: c_ifid %d, packet_ifid: %d\n", cifid, ifid);
 
-	if (__predict_false(cifid && cifid != nbuf->nb_ifid)) {
+	if (unlikely(cifid && cifid != ifid)) {
 		return NULL;
 	}
 
 	bool pforw = (flags & PFIL_ALL) == (u_int)di;
 	dprintf("flags %d, di %d, forw %d, pforw %d\n", flags, di, *forw, pforw);
 
-	if (__predict_false(*forw != pforw)) {
+	if (unlikely(*forw != pforw)) {
 		return NULL;
 	}
 
@@ -609,7 +543,7 @@ npf_conn_inspect(npf_cache_t *npc, const int di, int *error)
 	bool forw, ok;
 
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
-	if (__predict_false(!npf_conn_trackable_p(npc))) {
+	if (unlikely(!npf_conn_trackable_p(npc))) {
 		return NULL;
 	}
 
@@ -618,7 +552,7 @@ npf_conn_inspect(npf_cache_t *npc, const int di, int *error)
 		/* Note: reference is held. */
 		return con;
 	}
-	if (__predict_false(nbuf_head_mbuf(nbuf) == NULL)) {
+	if (unlikely(nbuf_head_mbuf(nbuf) == NULL)) {
 		*error = ENOMEM;
 		return NULL;
 	}
@@ -634,7 +568,7 @@ npf_conn_inspect(npf_cache_t *npc, const int di, int *error)
 	ok = npf_state_inspect(npc, &con->c_state, forw);
 	npf_lock_exit(&con->c_lock);
 
-	if (__predict_false(!ok)) {
+	if (unlikely(!ok)) {
 		/* Invalid: let the rules deal with it. */
 		npf_conn_release(con);
 		npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_INVALID_STATE);
@@ -651,10 +585,9 @@ npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
 {
 	nbuf_t *nbuf = npc->npc_nbuf;
 	npf_conn_t *con;
-	bool forw, ok;
 
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
-	if (__predict_false(!npf_conn_trackable_p(npc))) {
+	if (unlikely(!npf_conn_trackable_p(npc))) {
 		return NULL;
 	}
 
@@ -663,7 +596,7 @@ npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
 		/* Note: reference is held. */
 		return con;
 	}
-	if (__predict_false(nbuf_head_mbuf(nbuf) == NULL)) {
+	if (unlikely(nbuf_head_mbuf(nbuf) == NULL)) {
 		*error = ENOMEM;
 		return NULL;
 	}
@@ -696,7 +629,7 @@ npf_conn_inspect_part2(npf_conn_t* con, npf_cache_t *npc, const void* key,
 	bool ok = npf_state_inspect(npc, &con->c_state, forw);
 	npf_lock_exit(&con->c_lock);
 
-	if (__predict_false(!ok)) {
+	if (unlikely(!ok)) {
 		/* Invalid: let the rules deal with it. */
 		npf_conn_release(con);
 		npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_INVALID_STATE);
@@ -729,7 +662,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
 
-	if (__predict_false(!npf_conn_trackable_p(npc))) {
+	if (unlikely(!npf_conn_trackable_p(npc))) {
 	   dprintf("conn is not trackable\n");
 		return NULL;
 	}
@@ -740,7 +673,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	u_int con_type_flag;
 	pool_cache_t con_pool;
 
-	if (__predict_true(npc->npc_alen == sizeof(in_addr_t))) {
+	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
 		con_type_flag = CONN_IPV4;
 		con_pool = npf->conn_ipv4_cache;
 	}
@@ -751,7 +684,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 
 	/* Allocate and initialise the new connection. */
 	con = pool_cache_get(con_pool, PR_NOWAIT);
-	if (__predict_false(!con)) {
+	if (unlikely(!con)) {
 		npf_worker_signal(npf);
 		printf("no free pool entries\n");
 		return NULL;
@@ -765,7 +698,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	con->c_nat = NULL;
 
 	/* Initialize the protocol state. */
-	if (__predict_false(!npf_state_init(npc, &con->c_state))) {
+	if (unlikely(!npf_state_init(npc, &con->c_state))) {
 		npf_conn_destroy(npc, npf, con);
 		npf_log("npf_conn_establish() failed: state_init() failed");
 		return NULL;
@@ -777,7 +710,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	uint32_t* bk;
 	u_int key_nwords;
 
-	if (__predict_true(npc->npc_alen == sizeof(in_addr_t))) {
+	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
 		con_ipv4 = (npf_conn_ipv4_t*) con;
 		fw = &con_ipv4->c_forw_entry.ck_key[0];
 		bk = &con_ipv4->c_back_entry.ck_key[0];
@@ -794,7 +727,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	 * Construct "forwards" and "backwards" keys.  Also, set the
 	 * interface ID for this connection (unless it is global).
 	 */
-	if (__predict_false(!npf_conn_conkey(npc, fw, true) ||
+	if (unlikely(!npf_conn_conkey(npc, fw, true) ||
 	    !npf_conn_conkey(npc, bk, false))) {
 		npf_conn_destroy(npc, npf, con);
 		npf_log("npf_conn_establish() failed: could not create a connection key");
@@ -827,13 +760,13 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	 */
 	npf_lock_enter(&con->c_lock);
 
-	if (__predict_false(!npf_conndb_insert(npf->conn_db, fw, key_nwords,
+	if (unlikely(!npf_conndb_insert(npf->conn_db, fw, key_nwords,
 			  fw_key_hash, con))) {
 		error = EISCONN;
 		goto err;
 	}
 
-	if (__predict_false(!npf_conndb_insert(npf->conn_db, bk, key_nwords,
+	if (unlikely(!npf_conndb_insert(npf->conn_db, bk, key_nwords,
 			  bk_key_hash, con))) {
 		npf_conn_t *ret __diagused;
 		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords, fw_key_hash);
@@ -848,7 +781,7 @@ err:
 	 * and let the G/C thread to take care of it.  We cannot do it
 	 * here since there might be references acquired already.
 	 */
-	if (__predict_false(error)) {
+	if (unlikely(error)) {
 		atomic_or_uint(&con->c_flags, CONN_REMOVED | CONN_EXPIRE);
 		npf_stats_inc(npf, npc, NPF_STAT_RACE_CONN);
 		npf_log("npf_conn_establish() failed: error = %d", error);
@@ -923,7 +856,7 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 	KASSERT(ntype == NPF_NATOUT || ntype == NPF_NATIN);
 	tidx = nat_type_dimap[ntype];
 
-	if (__predict_true(con->c_flags & CONN_IPV4)) {
+	if (likely(con->c_flags & CONN_IPV4)) {
 		npf_conn_ipv4_t * con_ipv4 = (npf_conn_ipv4_t*) con;
 		fw = &con_ipv4->c_forw_entry.ck_key[0];
 		bk = &con_ipv4->c_back_entry.ck_key[0];
@@ -957,14 +890,14 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 
 	/* Acquire the lock and check for the races. */
 	npf_lock_enter(&con->c_lock);
-	if (__predict_false(con->c_flags & CONN_EXPIRE)) {
+	if (unlikely(con->c_flags & CONN_EXPIRE)) {
 		/* The connection got expired. */
 		npf_lock_exit(&con->c_lock);
 		return EINVAL;
 	}
 	KASSERT((con->c_flags & CONN_REMOVED) == 0);
 
-	if (__predict_false(con->c_nat != NULL)) {
+	if (unlikely(con->c_nat != NULL)) {
 		/* Race with a duplicate packet. */
 		npf_lock_exit(&con->c_lock);
 
@@ -1038,7 +971,7 @@ npf_conn_expire(npf_conn_t *con)
 bool
 npf_conn_pass(const npf_conn_t *con, npf_rproc_t **rp)
 {
-	if (__predict_true(con->c_flags & CONN_PASS)) {
+	if (likely(con->c_flags & CONN_PASS)) {
 		*rp = con->c_rproc;
 		return true;
 	}
@@ -1097,7 +1030,7 @@ npf_conn_expired(const npf_conn_t *con, uint64_t tsnow)
 	const int etime = npf_state_etime(&con->c_state, con->c_proto);
 	int elapsed;
 
-	if (__predict_false(con->c_flags & CONN_EXPIRE)) {
+	if (unlikely(con->c_flags & CONN_EXPIRE)) {
 		/* Explicitly marked to be expired. */
 		return true;
 	}
@@ -1144,7 +1077,7 @@ npf_conn_gc(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd, bool flush,
 			continue;
 		}
 
-		if (__predict_true(con->c_flags & CONN_IPV4)) {
+		if (likely(con->c_flags & CONN_IPV4)) {
 			npf_conn_ipv4_t * con_ipv4 = (npf_conn_ipv4_t*) con;
 			fw = &con_ipv4->c_forw_entry.ck_key[0];
 			bk = &con_ipv4->c_back_entry.ck_key[0];
@@ -1276,7 +1209,7 @@ npf_conn_export(npf_t *npf, const npf_conn_t *con)
 		return NULL;
 	}
 
-	if (__predict_true(con->c_flags & CONN_IPV4)) {
+	if (likely(con->c_flags & CONN_IPV4)) {
 		npf_conn_ipv4_t * con_ipv4 = (npf_conn_ipv4_t*) con;
 		fw = &con_ipv4->c_forw_entry.ck_key[0];
 		bk = &con_ipv4->c_back_entry.ck_key[0];

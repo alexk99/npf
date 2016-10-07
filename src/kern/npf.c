@@ -96,7 +96,7 @@ npf_get_conn_map_size(npf_t * npf)
 
 __dso_public npf_t *
 npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
-		  void* log_func)
+		  void* log_func, uint16_t num_threads)
 {
 	npf_t *npf;
 
@@ -108,12 +108,12 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 	}
 
 	/* statistics */
-	npf->stat_num_pointers = DEFAULT_STAT_PTR_NUM;
-	npf->stats_percpu = (uint64_t**) kmem_alloc(DEFAULT_STAT_PTR_NUM *
+	npf->stats_percpu_size = num_threads;
+	npf->stats_percpu = (uint64_t**) kmem_alloc(num_threads *
 			  sizeof(uint64_t*), KM_SLEEP);
 
 	int i, ret;
-	for (i=0; i<DEFAULT_STAT_PTR_NUM; i++) {
+	for (i=0; i<num_threads; i++) {
 		ret = posix_memalign((void**) &npf->stats_percpu[i], CACHE_LINE_SIZE,
 				  NPF_STATS_SIZE);
 		if (unlikely(ret != 0)) {
@@ -143,6 +143,8 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 
 #ifdef NPF_LOG_DEBUG
 	g_log_func = log_func;
+#else
+	(void) log_func;
 #endif
 
 #ifdef NPF_DEBUG_COUNTERS
@@ -178,7 +180,7 @@ npf_destroy(npf_t *npf)
 
 	/* destroy statistic memory */
 	int i;
-	for (i=0; i<npf->stat_num_pointers; i++) {
+	for (i=0; i<npf->stats_percpu_size; i++) {
 		free(npf->stats_percpu[i]);
 	}
 	kmem_free(npf->stats_percpu, sizeof(uint64_t*) * stat_num_pointers);
@@ -240,22 +242,37 @@ npf_stats_dec(const npf_t *npf, const npf_cache_t *npc, npf_stats_t st)
 	stats[st]--;
 }
 
-static void
-npf_stats_collect(void *mem, void *arg, struct cpu_info *ci)
-{
-	uint64_t *percpu_stats = mem, *full_stats = arg;
-
-	for (unsigned i = 0; i < NPF_STATS_COUNT; i++) {
-		full_stats[i] += percpu_stats[i];
-	}
-}
-
 /*
  * npf_stats: export collected statistics.
  */
 __dso_public void
-npf_stats(npf_t *npf, uint64_t *buf)
+npf_stats(npf_t* npf, uint64_t* full_stats)
 {
-	memset(buf, 0, NPF_STATS_SIZE);
-	percpu_foreach(npf->stats_percpu, npf_stats_collect, buf);
+	memset(full_stats, 0, NPF_STATS_SIZE);
+	uint64_t* percpu_stats;
+
+	for (unsigned i=0; i<npf->stats_percpu_size; i++) {
+		percpu_stats = npf->stats_percpu[i];
+		for (unsigned j=0; j<NPF_STATS_COUNT; j++) {
+			full_stats[j] += percpu_stats[j];
+		}
+	}
+}
+
+/*
+ * zero per cpu stats
+ */
+__dso_public void
+npf_stats_clear(npf_t* npf)
+{
+	uint64_t* percpu_stats;
+
+	for (unsigned i=0; i<npf->stats_percpu_size; i++) {
+		percpu_stats = npf->stats_percpu[i];
+
+		/* zero per cpu stats */
+		for (unsigned j=0; j<NPF_STATS_COUNT; j++) {
+			percpu_stats[j] = 0;
+		}
+	}
 }

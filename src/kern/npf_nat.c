@@ -700,8 +700,12 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	int error;
 	bool forw;
 
+	/* prefetch */
+	// prefetch0(con);
+
 	/* All relevant IPv4 data should be already cached. */
 	if (unlikely(!npf_iscached(npc, NPC_IP46) || !npf_iscached(npc, NPC_LAYER4))) {
+		dprintf("do nat exit 1\n");
 		return 0;
 	}
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
@@ -724,6 +728,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	 */
 	np = npf_nat_inspect(npc, di);
 	if (np == NULL) {
+		dprintf("packet does not match - done\n");
 		/* If packet does not match - done. */
 		return 0;
 	}

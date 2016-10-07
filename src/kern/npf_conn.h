@@ -157,10 +157,6 @@ unsigned	npf_conn_conkey(const npf_cache_t *, uint32_t *, bool);
 npf_conn_t *
 npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw);
 
-npf_conn_t *
-npf_conn_lookup_new(const npf_cache_t *npc, const int di, bool *forw);
-
-
 npf_conn_t*
 npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t* con_key,
 		  uint64_t* out_hv);

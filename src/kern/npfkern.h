@@ -64,7 +64,8 @@ typedef struct {
 int	npf_sysinit(unsigned);
 void	npf_sysfini(void);
 
-npf_t *	npf_create(int, const npf_mbufops_t *, const npf_ifops_t *, void* );
+npf_t *	npf_create(int, const npf_mbufops_t *, const npf_ifops_t *, void*,
+		  uint16_t);
 int	npf_load(npf_t *, void *, npf_error_t *);
 void	npf_gc(npf_t *, uint8_t);
 void	npf_destroy(npf_t *);
@@ -92,6 +93,7 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 void	npf_ifmap_attach(npf_t *, struct ifnet *);
 void	npf_ifmap_detach(npf_t *, struct ifnet *);
 void	npf_stats(npf_t *, uint64_t *);
+void  npf_stats_clear(npf_t*);
 
 void npf_checkpoint(npf_t *);
 

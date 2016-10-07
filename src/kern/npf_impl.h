@@ -157,13 +157,13 @@ typedef struct {
 struct nbuf {
 	struct mbuf *	nb_mbuf0;
 	struct mbuf *	nb_mbuf;
-	uint8_t*    mbuf_data_start;
-	void *		nb_nptr;
-	const ifnet_t *	nb_ifp;
-	unsigned	nb_ifid;
-	int		nb_flags;
-	const npf_mbufops_t *nb_mops;
-	uint8_t l2_hdr_size;
+	uint8_t*			mbuf_data_start;
+	void*				nb_nptr;
+	const ifnet_t*	nb_ifp;
+	const npf_mbufops_t* nb_mops;
+	int				nb_flags;
+	uint16_t			nb_ifid;
+	uint8_t			l2_hdr_size;
 };
 
 /*
@@ -180,8 +180,6 @@ typedef int (*npf_log_func_t)(char *format, ...);
 #ifdef NPF_LOG_DEBUG
 npf_log_func_t g_log_func;
 #endif /* NPF_LOG_DEBUG */
-
-#define DEFAULT_STAT_PTR_NUM 4
 
 struct npf {
 	/* Active NPF configuration. */
@@ -200,8 +198,12 @@ struct npf {
 	volatile int		conn_tracking;
 	npf_lock_t		conn_lock;
 
-
 	npf_conndb_t *		conn_db;
+
+	/* per cpu statistic */
+	uint64_t**	stats_percpu;
+
+	/* conn caches */
 	pool_cache_t		conn_ipv4_cache;
 	pool_cache_t		conn_ipv6_cache;
 
@@ -224,9 +226,8 @@ struct npf {
 	LIST_HEAD(, npf_ext)	ext_list;
 	kmutex_t		ext_lock;
 
-	/* Statistics. */
-	uint8_t		stat_num_pointers;
-	uint64_t**	stats_percpu;
+	/* Statistics size (num threads) */
+	uint16_t		stats_percpu_size;
 };
 
 /*

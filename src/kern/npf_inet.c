@@ -347,6 +347,8 @@ npf_cache_ip(npf_cache_t *npc, nbuf_t *nbuf)
 		npc->npc_hlen = ip->ip_hl << 2;
 		npc->npc_proto = ip->ip_p;
 
+		dprintf("npc cache proto %hu\n", npc->npc_proto);
+
 		npc->npc_ip.v4 = ip;
 		flags |= NPC_IP4;
 		break;
@@ -484,6 +486,7 @@ again:
 		/* Cache: layer 4 - UDP. */
 		npc->npc_l4.udp = nbuf_advance(nbuf, hlen,
 		    sizeof(struct udphdr));
+		dprintf("npc cache udp sport %hu\n", npc->npc_l4.udp->uh_sport);
 		l4flags = NPC_LAYER4 | NPC_UDP;
 		break;
 	case IPPROTO_ICMP:

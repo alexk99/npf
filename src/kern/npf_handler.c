@@ -131,13 +131,7 @@ npf_reassembly(npf_t *npf, npf_cache_t *npc, struct mbuf **mp)
 #define PH_STEP_BLOCK 6
 #define PH_STEP_OUT 7
 
-#define max_vec_size 32
-
-static inline void
-prefetch0(const volatile void *p)
-{
-	asm volatile ("prefetcht0 %[p]" : : [p] "m" (*(const volatile char *)p));
-}
+#define PKT_VEC_SIZE 32
 
 typedef void *	(*mbuf_getdata_cb_t)(const struct mbuf *);
 
@@ -153,15 +147,15 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		  uint8_t cpu_thread, uint16_t* ret_v,
 		  uint64_t* out_destroyed_packets_bitfld)
 {
-	nbuf_t nbuf_v[max_vec_size];
-	npf_cache_t npc_v[max_vec_size];
-	npf_conn_t* con_v[max_vec_size];
-	npf_rule_t* rl_v[max_vec_size];
-	npf_rproc_t* rp_v[max_vec_size];
-	int error_v[max_vec_size];
-	int retfl_v[max_vec_size];
-	int decision_v[max_vec_size];
-	uint8_t next_step_v[max_vec_size];
+	nbuf_t nbuf_v[PKT_VEC_SIZE];
+	npf_cache_t npc_v[PKT_VEC_SIZE];
+	npf_conn_t* con_v[PKT_VEC_SIZE];
+	npf_rule_t* rl_v[PKT_VEC_SIZE];
+	npf_rproc_t* rp_v[PKT_VEC_SIZE];
+	int error_v[PKT_VEC_SIZE];
+	int retfl_v[PKT_VEC_SIZE];
+	int decision_v[PKT_VEC_SIZE];
+	uint8_t next_step_v[PKT_VEC_SIZE];
 	uint8_t step = 1;
 	int i;
 
@@ -179,7 +173,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 * to check return values for each packet
 	 */
 	bool errors = false;
-	memset(next_step_v, 0, max_vec_size);
+	memset(next_step_v, 0, PKT_VEC_SIZE);
 
 	/*
 	 * step 1
@@ -197,17 +191,17 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		uint8_t l2_size = l2_size_v[i];
 		ifnet_t *ifp = ifp_v[i];
 
-		npc->sec = sec;
-
 		/*
 		 * Initialise packet information cache.
 		 * Note: it is enough to clear the info bits.
 		 */
+		npc->sec = sec;
 		npc->npc_ctx = npf;
 		nbuf_init2(npf, nbuf, mp, l2_size, ifp, mbuf_data_ptr_v[i]);
 		npc->npc_nbuf = nbuf;
 		npc->npc_info = 0;
 		npc->cpu_thread = cpu_thread;
+		npc->ifid = nbuf->nb_ifid;
 
 		decision_v[i] = NPF_DECISION_BLOCK;
 		error_v[i] = 0;
@@ -235,9 +229,6 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		}
 	}
 
-//	*out_destroyed_packets_bitfld = destroyed_packets_bitfld;
-//	return errors;
-
 	step++;
 
 	/*
@@ -247,13 +238,14 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 * Lookup connection and prefetch it
 	 */
 	{
-		uint32_t conn_key_buf[NPF_CONN_IPV6_KEYLEN_WORDS * max_vec_size];
-		uint64_t hashval_v[max_vec_size];
+		uint32_t conn_key_buf[NPF_CONN_IPV6_KEYLEN_WORDS * PKT_VEC_SIZE];
+		uint64_t hashval_v[PKT_VEC_SIZE];
 
 		uint64_t* hv_ptr = hashval_v;
 		npf_conn_t** con_ptr = con_v;
 		uint32_t* conn_key_ptr = conn_key_buf;
 		bool conn_found = false;
+		int error;
 
 		npc = npc_v;
 		for (i=0; i<vec_size; i++,npc++,hv_ptr++,con_ptr++,
@@ -265,19 +257,18 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 
 			dprintf(" -- step %d .0 -- \n", step);
 
-			/* Inspect the list of connections (if found, acquires a reference). */
-
-			/* todo: split inspect process into two steps: find and prefetch,
-			 * then inspect
-			 */
-			*con_ptr = npf_conn_inspect_part1(npc, conn_key_ptr, di, &error_v[i],
+			/* find and prefetch, don't inspect */
+			error = 0;
+			*con_ptr = npf_conn_inspect_part1(npc, conn_key_ptr, di, &error,
 					  hv_ptr);
-			if (unlikely(error_v[i])) {
+			if (unlikely(error)) {
+				error_v[i] = error;
 				errors = true;
 			}
 			else {
 				if (*con_ptr != NULL) {
 					prefetch0(*con_ptr);
+					prefetch0(npc);
 					conn_found = true;
 				}
 			}
@@ -286,7 +277,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		/*
 		 * step 2.1
 		 * Connection lookup part2
-		 * Inspect the found connection.
+		 * Inspect the found connections.
 		 */
 		if (conn_found) {
 			npc = npc_v;
@@ -304,10 +295,6 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 				dprintf(" -- step %d .1 -- \n", step);
 
 				/* Inspect the list of connections (if found, acquires a reference). */
-
-				/* todo: split inspect process into two steps: find and prefetch,
-				 * then inspect
-				 */
 				if (*con_ptr != NULL) {
 					*con_ptr = npf_conn_inspect_part2(*con_ptr, npc, conn_key_ptr,
 							  *hv_ptr, di);
@@ -444,7 +431,6 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 			continue;
 
 		dprintf(" -- step %d -- \n", step);
-
 		dprintf("pass point\n");
 		decision_v[i] = NPF_DECISION_PASS;
 		KASSERT(error_v[i] == 0);
@@ -453,7 +439,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		 */
 		error_v[i] = npf_do_nat(npc, *con, di);
 		if (unlikely(error_v[i])) {
-			dprintf2("do nat err: %d\n", error);
+			dprintf("do nat err: %d\n", error_v[i]);
 		}
 	}
 	step++;
@@ -518,8 +504,9 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		if (unlikely(mp  == NULL)) {
 			dprintf2 ("npf: block 10: ENOMEM or error\n");
 			ret_v[i] = error_v[i] ? error_v[i] : ENOMEM;
+			/* final return */
 			errors = true;
-			continue; // final return
+			continue;
 		}
 
 		dprintf("err: %d\n", error_v[i]);
@@ -541,10 +528,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		 * Depending on the flags and protocol, return TCP reset (RST) or
 		 * ICMP destination unreachable.
 		 */
-
-
 		if (retfl_v[i] && npf_return_block(npc, retfl_v[i])) {
-			dprintf2 ("npf: block 4\n");
+			dprintf2("npf: block 4\n");
 			mp = NULL;
 			MARK_PKT_DESTROYED(destroyed_packets_bitfld, i);
 		}
@@ -594,19 +579,19 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 	KASSERT(ifp != NULL);
 
 	dprintf("npf_packet_handler\n");
-	npc.sec = sec;
-
 	// return 0; // return #1
 
 	/*
 	 * Initialise packet information cache.
 	 * Note: it is enough to clear the info bits.
 	 */
+	npc.sec = sec;
 	npc.npc_ctx = npf;
 	nbuf_init2(npf, &nbuf, *mp, l2_hdr_size, ifp, mbuf_data_ptr);
 	npc.npc_nbuf = &nbuf;
 	npc.npc_info = 0;
 	npc.cpu_thread = cpu_thread;
+	npc.ifid = nbuf.nb_ifid;
 
 	decision = NPF_DECISION_BLOCK;
 	error = 0;
@@ -616,7 +601,7 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 	// return 0; // return #2
 
 	/* Cache everything.  Determine whether it is an IP fragment. */
-	if (__predict_false(npf_cache_all(&npc) & NPC_IPFRAG)) {
+	if (unlikely(npf_cache_all(&npc) & NPC_IPFRAG)) {
 		/*
 		 * Pass to IPv4 or IPv6 reassembly mechanism.
 		 */
@@ -646,7 +631,7 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 		dprintf ("npf: pass 1\n");
 		goto pass;
 	}
-	if (__predict_false(error)) {
+	if (unlikely(error)) {
 		if (error == ENETUNREACH) {
 			dprintf2("npf: block 1: ENETUNREACH\n");
 			goto block;
@@ -662,7 +647,7 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 	dprintf("rule inspect\n");
 
 	rl = npf_ruleset_inspect(&npc, rlset, di, NPF_LAYER_3);
-	if (__predict_false(rl == NULL)) {
+	if (unlikely(rl == NULL)) {
 		const bool pass = npf_default_pass(npf);
 		npf_config_read_exit(slock);
 
@@ -720,8 +705,8 @@ pass:
 	 * Perform NAT.
 	 */
 	error = npf_do_nat(&npc, con, di);
-	if (__predict_false(error)) {
-		dprintf2("do nat err: %d\n", error);
+	if (unlikely(error)) {
+		dprintf("do nat err: %d\n", error);
 	}
 block:
 	/*
@@ -748,7 +733,7 @@ out:
 	}
 
 	/* Reset mbuf pointer before returning to the caller. */
-	if (__predict_false((*mp = nbuf_head_mbuf(&nbuf)) == NULL)) {
+	if (unlikely((*mp = nbuf_head_mbuf(&nbuf)) == NULL)) {
 		dprintf2 ("npf: block 10: ENOMEM or error\n");
 		return error ? error : ENOMEM;
 	}
@@ -756,7 +741,7 @@ out:
 	dprintf("decision: %d, err: %d\n", decision, error);
 
 	/* Pass the packet if decided and there is no error. */
-	if (__predict_true(decision == NPF_DECISION_PASS && !error)) {
+	if (likely(decision == NPF_DECISION_PASS && !error)) {
 		/*
 		 * XXX: Disable for now, it will be set accordingly later,
 		 * for optimisations (to reduce inspection).

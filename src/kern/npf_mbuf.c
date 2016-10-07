@@ -83,7 +83,7 @@ void
 nbuf_init2(npf_t *npf, nbuf_t *nbuf, struct mbuf *m, uint8_t l2_hdr_size,
 		  const ifnet_t *ifp, uint8_t* mbuf_data_start)
 {
-	u_int ifid = (uintptr_t) ifp->arg;
+	uint16_t ifid = (uintptr_t) ifp->arg;
 
 	KASSERT(m_flags_p(m, M_PKTHDR));
 	nbuf->nb_mops = npf->mbufops;

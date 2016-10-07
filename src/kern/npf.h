@@ -191,6 +191,7 @@ typedef struct {
 	/**/
 	__time_t						sec;
 
+	uint16_t						ifid;
 	/* number of cpu thread (core) */
 	uint8_t						cpu_thread;
 } npf_cache_t;
@@ -204,6 +205,12 @@ npf_iscached(const npf_cache_t *npc, const int inf)
 
 #define	NPF_SRC		0
 #define	NPF_DST		1
+
+static inline void
+prefetch0(const volatile void *p)
+{
+	asm volatile ("prefetcht0 %[p]" : : [p] "m" (*(const volatile char *)p));
+}
 
 /*
  * NPF extensions and rule procedure interface.

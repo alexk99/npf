@@ -304,10 +304,9 @@ static const uint8_t npf_tcp_fsm[NPF_TCP_NSTATES][2][TCPFC_COUNT] = {
 static bool
 npf_tcp_inwindow(npf_cache_t *npc, npf_state_t *nst, const int di)
 {
-	// debug todo remove
+#ifdef NPF_DEBUG_DONT_TRACK_TCP_WINDOW
 	return true;
-	// debug end
-
+#endif
 	const struct tcphdr * const th = npc->npc_l4.tcp;
 	const int tcpfl = th->th_flags;
 	npf_tcpstate_t *fstate, *tstate;
@@ -497,9 +496,6 @@ npf_state_tcp(npf_cache_t *npc, npf_state_t *nst, int di)
 
 	/* Determine whether TCP packet really belongs to this connection. */
 	if (!npf_tcp_inwindow(npc, nst, di)) {
-		// debug: todo remove
-		// npf_log("pkt is not in a window");
-
 		if (state == NPF_TCPS_CLOSED) {
 			return npf_state_init(npc, nst);
 		}
