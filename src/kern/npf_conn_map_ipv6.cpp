@@ -37,7 +37,7 @@ typedef cuckoohash_map<npf_connkey_ipv6_t, void*,
 
 void* npf_conn_map_ipv6_init(void) {
 	con_map_ipv6_t* map = new con_map_ipv6_t(NPF_CONN_MAP_IPV6_SIZE);
-	dprintf2("conn map num BUCKETS: %lu\n", map->bucket_count());
+	dprintf("conn map num BUCKETS: %lu\n", map->bucket_count());
 	return (void*) map;
 }
 

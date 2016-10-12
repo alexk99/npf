@@ -144,6 +144,8 @@ struct npf_conn_ipv6 {
 typedef struct npf_connkey_ipv4 npf_connkey_ipv4_t;
 typedef struct npf_connkey_ipv6 npf_connkey_ipv6_t;
 
+typedef int (*npf_print_cb_t) (const char* msg, void* context);
+
 /*
  * Connection tracking interface.
  */
@@ -234,5 +236,9 @@ void		npf_conndb_settail(npf_conndb_t *, npf_conn_t *);
 int		npf_conndb_export(npf_t *, prop_array_t);
 
 void npf_conn_print_atime(const npf_conn_t *);
+
+void
+npf_conndb_print_state_summary(npf_conndb_t*, npf_print_cb_t, void*);
+
 
 #endif	/* _NPF_CONN_H_ */

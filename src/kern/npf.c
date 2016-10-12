@@ -276,3 +276,12 @@ npf_stats_clear(npf_t* npf)
 		}
 	}
 }
+
+/*
+ * conndb summary
+ */
+__dso_public void
+npf_conndb_state_summary(npf_t* npf, npf_print_cb_t print_line_cb, void* context)
+{
+	npf_conndb_print_state_summary(npf->conn_db, print_line_cb, context);
+}

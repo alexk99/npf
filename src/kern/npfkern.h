@@ -61,6 +61,8 @@ typedef struct {
 	bool		(*ensure_writable)(struct mbuf **, size_t);
 } npf_mbufops_t;
 
+typedef int (*npf_print_cb_t) (const char* msg, void* context);
+
 int	npf_sysinit(unsigned);
 void	npf_sysfini(void);
 
@@ -90,10 +92,11 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 		  size_t l2_hdr_size, ifnet_t *ifp, int di, __time_t sec,
 		  uint8_t cpu_thread);
 
-void	npf_ifmap_attach(npf_t *, struct ifnet *);
-void	npf_ifmap_detach(npf_t *, struct ifnet *);
-void	npf_stats(npf_t *, uint64_t *);
-void  npf_stats_clear(npf_t*);
+void npf_ifmap_attach(npf_t *, struct ifnet *);
+void npf_ifmap_detach(npf_t *, struct ifnet *);
+void npf_stats(npf_t *, uint64_t *);
+void npf_stats_clear(npf_t*);
+void npf_conndb_state_summary(npf_t*, npf_print_cb_t, void*);
 
 void npf_checkpoint(npf_t *);
 

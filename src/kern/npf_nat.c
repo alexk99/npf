@@ -185,7 +185,7 @@ npf_nat_init_pm(npf_portmap_hash_t* pm, npf_nat_t* nt)
 	assert(pm);
 	nt->n_portmap = npf_portmap_get(pm, translation_ip);
 	assert(nt->n_portmap->p_refcnt > 0);
-	dprintf2("npf_nat_init_pm() rc = %u\n", nt->n_portmap->p_refcnt);
+	dprintf("npf_nat_init_pm() rc = %u\n", nt->n_portmap->p_refcnt);
 }
 
 /*
@@ -564,7 +564,7 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 					  (npc->npc_ips[0]->word32[0] & (~ mask));
 			nt->nt_taddr.word32[0] = taddr;
 
-			dprintf2("netmap: taddr %u, src addr %u, mask %u, res %u\n",
+			dprintf("netmap: taddr %u, src addr %u, mask %u, res %u\n",
 					  nt->nt_natpolicy->n_taddr.word32[0],
 					  npc->npc_ips[0]->word32[0],
 					  nt->nt_natpolicy->n_tmask,
@@ -742,7 +742,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 		error = npf_nat_algo(npc, np, forw);
 		atomic_dec_uint(&np->n_refcnt);
 
-		dprintf2("nat err1\n");
+		dprintf("nat err1\n");
 		return error;
 	}
 
@@ -769,7 +769,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	nt = npf_nat_create(npc, np, con);
 	if (unlikely(nt == NULL)) {
 		atomic_dec_uint(&np->n_refcnt);
-		dprintf2("nat err3\n");
+		dprintf("nat err3\n");
 		error = ENOMEM;
 		goto out;
 	}
@@ -779,7 +779,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	if (unlikely(error)) {
 		/* Will release the reference. */
 		npf_nat_destroy(npc, npc->npc_ctx, nt);
-		dprintf2("nat err4\n");
+		dprintf("nat err4\n");
 		goto out;
 	}
 

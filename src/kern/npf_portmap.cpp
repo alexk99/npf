@@ -58,7 +58,7 @@ npf_portmap_get(npf_portmap_hash_t* pm, uint32_t ip)
 				uint32_t new_rc = rc + 1;
 				if (likely(atomic_cas_ptr(&pm_entry->p_refcnt, rc, new_rc) == rc)) {
 					/* reference counter is sucessfully incremented */
-					dprintf2("Reference to existing portmap is acquired.\n");
+					dprintf("Reference to existing portmap is acquired.\n");
 					return pm_entry;
 				}
 
@@ -81,7 +81,7 @@ npf_portmap_get(npf_portmap_hash_t* pm, uint32_t ip)
 		 */
 
 		/* Allocate a new port map for the NAT policy. */
-		dprintf2("new portmap\n");
+		dprintf("new portmap\n");
 		
 		/*
 		 * todo: use a pool of pm entries to encrease perfomance
@@ -237,7 +237,7 @@ npf_portmap_init(void)
 	pm->hash = hash;
 	pm->gc_list = NULL;
 	
-	dprintf2("portmap hash BUCKETS: %lu\n", hash->bucket_count());
+	dprintf("portmap hash BUCKETS: %lu\n", hash->bucket_count());
 	return pm;
 }
 

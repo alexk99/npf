@@ -123,7 +123,7 @@ npf_reassembly(npf_t *npf, npf_cache_t *npc, struct mbuf **mp)
 	return 0;
 }
 
-#define MARK_PKT_DESTROYED(bitfld, n) bitfld = bitfld | (1 << n)
+#define MARK_PKT_DESTROYED(bitfld, n) bitfld |= (1 << n)
 #define IS_PKT_DESROYED(bitfld, n) (bitfld & (1 << n))
 
 
@@ -131,7 +131,7 @@ npf_reassembly(npf_t *npf, npf_cache_t *npc, struct mbuf **mp)
 #define PH_STEP_BLOCK 6
 #define PH_STEP_OUT 7
 
-#define PKT_VEC_SIZE 32
+#define PKT_VEC_SIZE 64
 
 typedef void *	(*mbuf_getdata_cb_t)(const struct mbuf *);
 
@@ -222,6 +222,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 			}
 			if (mp == NULL) {
 				MARK_PKT_DESTROYED(destroyed_packets_bitfld, i);
+				dprintf2("destroy 1\n");
 				/* More fragments should come; return. */
 				ret_v[i] = 0;
 				continue;
@@ -328,7 +329,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		}
 		if (unlikely(error_v[i])) {
 			if (error_v[i] == ENETUNREACH) {
-				dprintf2("npf: block 1: ENETUNREACH\n");
+				dprintf("npf: block 1: ENETUNREACH\n");
 				next_step_v[i] = PH_STEP_BLOCK;
 				continue;
 			}
@@ -356,7 +357,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 				continue;
 			}
 			npf_stats_inc(npf, npc, NPF_STAT_BLOCK_DEFAULT);
-			dprintf2("npf: block 2: block_default\n");
+			dprintf("npf: block 2: block_default\n");
 			next_step_v[i] = PH_STEP_BLOCK;
 			continue;
 		}
@@ -376,7 +377,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 
 		if (error) {
 			npf_stats_inc(npf, npc, NPF_STAT_BLOCK_RULESET);
-			dprintf2("npf: block 3: block_ruleset\n");
+			dprintf("npf: block 3: block_ruleset\n");
 			next_step_v[i] = PH_STEP_BLOCK;
 			continue;
 		}
@@ -468,6 +469,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 			npf_rproc_release(rp_v[i]);
 
 			MARK_PKT_DESTROYED(destroyed_packets_bitfld, i);
+			dprintf2("destroy 2\n");
 			ret_v[i] = 0;
 			continue;
 		}
@@ -502,7 +504,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		/* Reset mbuf pointer before returning to the caller. */
 		struct mbuf* mp = nbuf_head_mbuf(nbuf);
 		if (unlikely(mp  == NULL)) {
-			dprintf2 ("npf: block 10: ENOMEM or error\n");
+			dprintf("npf: block 10: ENOMEM or error\n");
 			ret_v[i] = error_v[i] ? error_v[i] : ENOMEM;
 			/* final return */
 			errors = true;
@@ -529,9 +531,10 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		 * ICMP destination unreachable.
 		 */
 		if (retfl_v[i] && npf_return_block(npc, retfl_v[i])) {
-			dprintf2("npf: block 4\n");
+			dprintf("npf: block 4\n");
 			mp = NULL;
 			MARK_PKT_DESTROYED(destroyed_packets_bitfld, i);
+			dprintf2("destroy 3\n");
 		}
 
 		if (!error_v[i]) {
@@ -540,6 +543,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 
 		if (mp) {
 			/* Free the mbuf chain. */
+			dprintf2("destroy 4: mbuf ptr %p, index %d\n", mp, i);
 			m_freem(mp);
 			MARK_PKT_DESTROYED(destroyed_packets_bitfld, i);
 		}
@@ -633,7 +637,7 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 	}
 	if (unlikely(error)) {
 		if (error == ENETUNREACH) {
-			dprintf2("npf: block 1: ENETUNREACH\n");
+			dprintf("npf: block 1: ENETUNREACH\n");
 			goto block;
 		}
 		goto out;
@@ -657,7 +661,7 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 			goto pass;
 		}
 		npf_stats_inc(npf, &npc, NPF_STAT_BLOCK_DEFAULT);
-		dprintf2("npf: block 2: block_default\n");
+		dprintf("npf: block 2: block_default\n");
 		goto block;
 	}
 
@@ -676,7 +680,7 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 
 	if (error) {
 		npf_stats_inc(npf, &npc, NPF_STAT_BLOCK_RULESET);
-		dprintf2("npf: block 3: block_ruleset\n");
+		dprintf("npf: block 3: block_ruleset\n");
 		goto block;
 	}
 	npf_stats_inc(npf, &npc, NPF_STAT_PASS_RULESET);
@@ -734,7 +738,7 @@ out:
 
 	/* Reset mbuf pointer before returning to the caller. */
 	if (unlikely((*mp = nbuf_head_mbuf(&nbuf)) == NULL)) {
-		dprintf2 ("npf: block 10: ENOMEM or error\n");
+		dprintf("npf: block 10: ENOMEM or error\n");
 		return error ? error : ENOMEM;
 	}
 
@@ -756,7 +760,7 @@ out:
 	 * ICMP destination unreachable.
 	 */
 	if (retfl && npf_return_block(&npc, retfl)) {
-		dprintf2 ("npf: block 4\n");
+		dprintf("npf: block 4\n");
 		*mp = NULL;
 	}
 

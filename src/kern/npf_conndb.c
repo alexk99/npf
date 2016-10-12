@@ -296,8 +296,6 @@ npf_conndb_enqueue(npf_conndb_t *cd, npf_conn_t *con)
 void
 npf_conndb_dequeue(npf_conndb_t *cd, npf_conn_t *con, npf_conn_t *prev)
 {
-	dprintf2("npf_conndb_dequeue\n");
-
 	if (prev == NULL) {
 		KASSERT(cd->cd_list == con);
 		cd->cd_list = con->c_next;
@@ -335,4 +333,61 @@ npf_conndb_settail(npf_conndb_t *cd, npf_conn_t *con)
 	KASSERT(con || cd->cd_list == NULL);
 	KASSERT(!con || con->c_next == NULL);
 	cd->cd_tail = con;
+}
+
+/*
+ *
+ */
+void
+npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
+		  void* context)
+{
+	/* +1 for NPF_TCPS_OK */
+	uint32_t tcp_state_cnts[NPF_TCP_NSTATES];
+	memset(&tcp_state_cnts[0], 0, sizeof(uint32_t) * NPF_TCP_NSTATES);
+
+	npf_conn_t* conn = cd->cd_list;
+	uint32_t state;
+
+	/* interate conndb, count states */
+	while (conn) {
+
+		switch (conn->c_proto) {
+			case IPPROTO_TCP:
+				state = conn->c_state.nst_state;
+				assert(state < NPF_TCP_NSTATES);
+				tcp_state_cnts[state]++;
+				break;
+		}
+
+		conn = conn->c_next;
+	}
+
+	/* output tcp_state_cnt table using the callback function */
+	int i;
+	char msg[128];
+	static const char* tcp_state_names[NPF_TCP_NSTATES] = {
+		"closed\t",			/*	0 */
+		"syn_sent",			/* 1 */
+		"sim_syn_sent",	/* 2 */
+		"syn_received",	/* 3 */
+		"established",		/* 4 */
+		"fin_sent",			/* 5 */
+		"fin_received",	/* 6 */
+		"close_wait",		/* 7 */
+		"fin_wait",			/* 8 */
+		"closing",			/* 9 */
+		"last_ack",			/* 10 */
+		"time_wait",		/* 11 */
+	};
+
+	sprintf(msg, "state\t\t\tcnt");
+	print_line_cb(msg, context);
+	sprintf(msg, "-------------------------");
+	print_line_cb(msg, context);
+
+	for (i=0; i<NPF_TCP_NSTATES; i++) {
+		sprintf(msg, "%s:\t\t%u", tcp_state_names[i], tcp_state_cnts[i]);
+		print_line_cb(msg, context);
+	}
 }

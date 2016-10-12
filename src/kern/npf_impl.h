@@ -122,6 +122,26 @@ typedef void (*npf_workfunc_t)(npf_t *, npf_cache_t *);
 #define	NPF_MAX_WORKS		4
 
 /*
+ * NPF TCP states.  Note: these states are different from the TCP FSM
+ * states of RFC 793.  The packet filter is a man-in-the-middle.
+ */
+#define	NPF_TCPS_OK		255
+#define	NPF_TCPS_CLOSED		0
+#define	NPF_TCPS_SYN_SENT	1
+#define	NPF_TCPS_SIMSYN_SENT	2
+#define	NPF_TCPS_SYN_RECEIVED	3
+#define	NPF_TCPS_ESTABLISHED	4
+#define	NPF_TCPS_FIN_SENT	5
+#define	NPF_TCPS_FIN_RECEIVED	6
+#define	NPF_TCPS_CLOSE_WAIT	7
+#define	NPF_TCPS_FIN_WAIT	8
+#define	NPF_TCPS_CLOSING	9
+#define	NPF_TCPS_LAST_ACK	10
+#define	NPF_TCPS_TIME_WAIT	11
+
+#define	NPF_TCP_NSTATES		12
+
+/*
  * CONNECTION STATE STRUCTURES
  */
 

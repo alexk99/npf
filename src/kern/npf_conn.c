@@ -916,7 +916,7 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 		connkey_set_id(bk, tport, tidx);
 	}
 
-	dprintf2("back_entry: tport: %d, tidx: %d\n", tport, tidx);
+	dprintf("back_entry: tport: %d, tidx: %d\n", tport, tidx);
 
 	/* Finally, re-insert the "backwards" entry. */
 	hv = npf_conndb_hash(npf->conn_db, bk, key_nwords);
@@ -1382,5 +1382,5 @@ npf_conn_print(const npf_conn_t *con)
 
 void npf_conn_print_atime(const npf_conn_t *con)
 {
-	dprintf2("con atime %lu\n", con->c_atime);
+	dprintf("con atime %lu\n", con->c_atime);
 }

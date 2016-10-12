@@ -817,7 +817,7 @@ static inline bool
 npf_rule_inspect(const npf_rule_t *rl, bpf_args_t *bc_args,
     const int di_mask, const u_int ifid)
 {
-	dprintf2("rule inspect: rule if %d, pkt if %d\n", rl->r_ifid, ifid);
+	dprintf("rule inspect: rule if %d, pkt if %d\n", rl->r_ifid, ifid);
 
 	/* Match the interface. */
 	if (rl->r_ifid && rl->r_ifid != ifid) {
