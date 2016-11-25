@@ -474,14 +474,29 @@ npf_state_tcp(npf_cache_t *npc, npf_state_t *nst, int di)
 		nstate = NPF_TCPS_CLOSED;
 	}
 
+#define	NPF_TCPS_CLOSED		0
+#define	NPF_TCPS_SYN_SENT	1
+#define	NPF_TCPS_SIMSYN_SENT	2
+#define	NPF_TCPS_SYN_RECEIVED	3
+#define	NPF_TCPS_ESTABLISHED	4
+#define	NPF_TCPS_FIN_SENT	5
+#define	NPF_TCPS_FIN_RECEIVED	6
+#define	NPF_TCPS_CLOSE_WAIT	7
+#define	NPF_TCPS_FIN_WAIT	8
+#define	NPF_TCPS_CLOSING	9
+#define	NPF_TCPS_LAST_ACK	10
+#define	NPF_TCPS_TIME_WAIT	11
+
+
 	/* Determine whether TCP packet really belongs to this connection. */
 	if (!npf_tcp_inwindow(npc, nst, di)) {
-		if (state == NPF_TCPS_CLOSED) {
-			return npf_state_init(npc, nst);
-		}
-		else {
-			return false;
-		}
+		return npf_state_init(npc, nst);
+//		if (state == NPF_TCPS_CLOSED) {
+//			return npf_state_init(npc, nst);
+//		}
+//		else {
+//			return false;
+//		}
 	}
 	if (__predict_true(nstate == NPF_TCPS_OK)) {
 		return true;
