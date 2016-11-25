@@ -111,6 +111,8 @@ npf_alg_construct(npf_t *npf, const char *name)
 {
 	npf_alg_t *alg;
 
+	dprintf("npf_alg_construct()\n");
+	
 	npf_config_enter(npf);
 	if ((alg = npf_alg_lookup(npf, name)) == NULL) {
 		char modname[NPF_EXT_PREFLEN + 64];
@@ -118,6 +120,7 @@ npf_alg_construct(npf_t *npf, const char *name)
 		npf_config_exit(npf);
 
 		if (module_autoload(modname, MODULE_CLASS_MISC) != 0) {
+			dprintf("autoload alg module %s failed\n", name);
 			return NULL;
 		}
 		npf_config_enter(npf);
@@ -235,6 +238,7 @@ npf_alg_exec(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 		const npfa_funcs_t *f = &aset->alg_funcs[i];
 
 		if (f->translate) {
+			dprintf("alg number %d translate()\n", i);
 			f->translate(npc, nt, forw);
 		}
 	}

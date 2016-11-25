@@ -491,6 +491,8 @@ again:
 		break;
 	case IPPROTO_ICMP:
 		/* Cache: layer 4 - ICMPv4. */
+		dprintf("npc cache icmp\n");
+		
 		npc->npc_l4.icmp = nbuf_advance(nbuf, hlen,
 		    offsetof(struct icmp, icmp_void));
 		l4flags = NPC_LAYER4 | NPC_ICMP;

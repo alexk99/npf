@@ -54,6 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: npf.c,v 1.22 2014/07/25 08:10:40 dholland Exp $");
 #define _XOPEN_SOURCE 600
 
 #include <stdlib.h>
+#include "npf_alg_icmp.h"
 
 #ifdef NPF_DEBUG_COUNTERS
 uint64_t g_debug_counter;
@@ -153,6 +154,10 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 
 	/* Load an empty configuration. */
 	npf_config_init(npf);
+	
+	/* init icmp alg */
+	npf_alg_icmp_modcmd(MODULE_CMD_INIT, npf);
+	
 	return npf;
 }
 

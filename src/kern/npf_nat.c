@@ -166,8 +166,8 @@ static pool_cache_t		nat_cache	__read_mostly;
 void
 npf_nat_sysinit(void)
 {
-	nat_cache = pool_cache_init(sizeof(npf_nat_t), coherency_unit,
-	    0, 0, "npfnatpl", NULL, IPL_NET, NULL, NULL, NULL);
+	nat_cache = pool_cache_init(sizeof (npf_nat_t), coherency_unit,
+		0, 0, "npfnatpl", NULL, IPL_NET, NULL, NULL, NULL);
 	KASSERT(nat_cache != NULL);
 }
 
@@ -199,7 +199,7 @@ npf_nat_newpolicy(npf_t *npf, prop_dictionary_t natdict, npf_ruleset_t *rset)
 	npf_natpolicy_t *np;
 	prop_object_t obj;
 
-	np = kmem_zalloc(sizeof(npf_natpolicy_t), KM_SLEEP);
+	np = kmem_zalloc(sizeof (npf_natpolicy_t), KM_SLEEP);
 	np->n_npfctx = npf;
 
 	/* The translation type, flags and policy ID. */
@@ -218,7 +218,7 @@ npf_nat_newpolicy(npf_t *npf, prop_dictionary_t natdict, npf_ruleset_t *rset)
 	/* Translation IP, mask and port (if applicable). */
 	obj = prop_dictionary_get(natdict, "nat-ip");
 	np->n_alen = prop_data_size(obj);
-	if (np->n_alen == 0 || np->n_alen > sizeof(npf_addr_t)) {
+	if (np->n_alen == 0 || np->n_alen > sizeof (npf_addr_t)) {
 		dprintf("nat_policy failed reason 2\n");
 		goto err;
 	}
@@ -228,22 +228,22 @@ npf_nat_newpolicy(npf_t *npf, prop_dictionary_t natdict, npf_ruleset_t *rset)
 
 	prop_dictionary_get_uint32(natdict, "nat-algo", &np->n_algo);
 	switch (np->n_algo) {
-	case NPF_ALGO_NPT66:
-		prop_dictionary_get_uint16(natdict, "npt66-adj",
-		    &np->n_npt66_adj);
-		break;
-	default:
-		if (np->n_tmask != NPF_NO_NETMASK && (np->n_flags & NPF_NAT_PORTMAP) == 0) {
-			dprintf("nat_policy failed reason 3\n");
-			goto err;
-		}
-		break;
+		case NPF_ALGO_NPT66:
+			prop_dictionary_get_uint16(natdict, "npt66-adj",
+				&np->n_npt66_adj);
+			break;
+		default:
+			if (np->n_tmask != NPF_NO_NETMASK && (np->n_flags & NPF_NAT_PORTMAP) == 0) {
+				dprintf("nat_policy failed reason 3\n");
+				goto err;
+			}
+			break;
 	}
 
 	return np;
 err:
 	npf_lock_destroy(&np->n_lock);
-	kmem_free(np, sizeof(npf_natpolicy_t));
+	kmem_free(np, sizeof (npf_natpolicy_t));
 	return NULL;
 }
 
@@ -263,9 +263,9 @@ npf_nat_policyexport(const npf_natpolicy_t *np, prop_dictionary_t natdict)
 	prop_dictionary_set_uint32(natdict, "nat-algo", np->n_algo);
 
 	switch (np->n_algo) {
-	case NPF_ALGO_NPT66:
-		prop_dictionary_set_uint16(natdict, "npt66-adj", np->n_npt66_adj);
-		break;
+		case NPF_ALGO_NPT66:
+			prop_dictionary_set_uint16(natdict, "npt66-adj", np->n_npt66_adj);
+			break;
 	}
 	prop_dictionary_set_uint64(natdict, "nat-policy", np->n_id);
 	return 0;
@@ -288,6 +288,7 @@ npf_nat_freepolicy(npf_natpolicy_t *np)
 	 */
 	while (np->n_refcnt) {
 		npf_lock_enter(&np->n_lock);
+
 		LIST_FOREACH(nt, &np->n_nat_list, nt_entry) {
 			con = nt->nt_conn;
 			KASSERT(con != NULL);
@@ -303,7 +304,7 @@ npf_nat_freepolicy(npf_natpolicy_t *np)
 	KASSERT(pm == NULL || pm->p_refcnt > 0);
 
 	npf_lock_destroy(&np->n_lock);
-	kmem_free(np, sizeof(npf_natpolicy_t));
+	kmem_free(np, sizeof (npf_natpolicy_t));
 }
 
 int npf_nat_type(npf_nat_t *nat)
@@ -317,6 +318,7 @@ npf_nat_freealg(npf_natpolicy_t *np, npf_alg_t *alg)
 	npf_nat_t *nt;
 
 	npf_lock_enter(&np->n_lock);
+
 	LIST_FOREACH(nt, &np->n_nat_list, nt_entry) {
 		if (nt->nt_alg == alg)
 			nt->nt_alg = NULL;
@@ -339,8 +341,8 @@ npf_nat_cmppolicy(npf_natpolicy_t *np, npf_natpolicy_t *mnp)
 	 * which is enough for matching criterion.
 	 */
 	KASSERT(np && mnp && np != mnp);
-	np_raw = (const uint8_t *)np + NPF_NP_CMP_START;
-	mnp_raw = (const uint8_t *)mnp + NPF_NP_CMP_START;
+	np_raw = (const uint8_t *) np + NPF_NP_CMP_START;
+	mnp_raw = (const uint8_t *) mnp + NPF_NP_CMP_START;
 	return memcmp(np_raw, mnp_raw, NPF_NP_CMP_SIZE) == 0;
 }
 
@@ -469,7 +471,7 @@ npf_nat_which(const int type, bool forw)
 	}
 	CTASSERT(NPF_SRC == 0 && NPF_DST == 1);
 	KASSERT(forw == NPF_SRC || forw == NPF_DST);
-	return (u_int)forw;
+	return (u_int) forw;
 }
 
 /*
@@ -502,6 +504,8 @@ npf_nat_inspect(npf_cache_t *npc, const int di)
 static npf_nat_t *
 npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 {
+	dprintf("npf_nat_create\n");
+
 	const int proto = npc->npc_proto;
 	npf_nat_t *nt;
 
@@ -510,7 +514,7 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 
 	/* Construct a new NAT entry and associate it with the connection. */
 	nt = pool_cache_get(nat_cache, PR_NOWAIT);
-	if (nt == NULL){
+	if (nt == NULL) {
 		return NULL;
 	}
 	npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_NAT_CREATE);
@@ -528,28 +532,7 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 		memcpy(&nt->nt_oaddr, npc->npc_ips[NPF_DST], npc->npc_alen);
 	}
 
-	/*
-	 * Port translation, if required, and if it is TCP/UDP.
-	 */
-	if ((np->n_flags & NPF_NAT_PORTS) == 0 ||
-	    (proto != IPPROTO_TCP && proto != IPPROTO_UDP)) {
-		nt->nt_oport = 0;
-		nt->nt_tport = 0;
-		goto out;
-	}
-
-	/* Save the relevant TCP/UDP port. */
-	if (proto == IPPROTO_TCP) {
-		const struct tcphdr *th = npc->npc_l4.tcp;
-		nt->nt_oport = (np->n_type == NPF_NATOUT) ?
-		    th->th_sport : th->th_dport;
-	} else {
-		const struct udphdr *uh = npc->npc_l4.udp;
-		nt->nt_oport = (np->n_type == NPF_NATOUT) ?
-		    uh->uh_sport : uh->uh_dport;
-	}
-
-	/* Get a new port for translation. */
+	/* init translation address */
 	if ((np->n_flags & NPF_NAT_PORTMAP) != 0) {
 		if ((np->n_flags & NPF_NAT_NETMAP) != 0) {
 			/* calculate a translation ip
@@ -561,19 +544,44 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 			 */
 			uint32_t mask = htonl(0xffffffff << (32 - nt->nt_natpolicy->n_tmask));
 			uint32_t taddr = (nt->nt_natpolicy->n_taddr.word32[0] & mask) |
-					  (npc->npc_ips[0]->word32[0] & (~ mask));
+				(npc->npc_ips[0]->word32[0] & (~mask));
 			nt->nt_taddr.word32[0] = taddr;
 
 			dprintf("netmap: taddr %u, src addr %u, mask %u, res %u\n",
-					  nt->nt_natpolicy->n_taddr.word32[0],
-					  npc->npc_ips[0]->word32[0],
-					  nt->nt_natpolicy->n_tmask,
-					  taddr);
+				nt->nt_natpolicy->n_taddr.word32[0],
+				npc->npc_ips[0]->word32[0],
+				nt->nt_natpolicy->n_tmask,
+				taddr);
 		}
 		else {
 			nt->nt_taddr = np->n_taddr;
 		}
+	}
 
+	/*
+	 * Port translation, if required, and if it is TCP/UDP.
+	 */
+	if ((np->n_flags & NPF_NAT_PORTS) == 0 ||
+		(proto != IPPROTO_TCP && proto != IPPROTO_UDP)) {
+		nt->nt_oport = 0;
+		nt->nt_tport = 0;
+		dprintf("npf_nat_create: goto out, m1\n");
+		goto out;
+	}
+
+	/* Save the relevant TCP/UDP port. */
+	if (proto == IPPROTO_TCP) {
+		const struct tcphdr *th = npc->npc_l4.tcp;
+		nt->nt_oport = (np->n_type == NPF_NATOUT) ?
+			th->th_sport : th->th_dport;
+	} else {
+		const struct udphdr *uh = npc->npc_l4.udp;
+		nt->nt_oport = (np->n_type == NPF_NATOUT) ?
+			uh->uh_sport : uh->uh_dport;
+	}
+
+	/* Get a new port for translation. */
+	if ((np->n_flags & NPF_NAT_PORTMAP) != 0) {
 		/* init port map */
 		npf_nat_init_pm(npc->npc_ctx->nat_portmap_hash, nt);
 
@@ -615,6 +623,7 @@ npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 			addr = &con_ipv4->nt_taddr;
 			port = con_ipv4->nt_tport;
 			nt_type = con_ipv4->nt_type;
+			dprintf("npf_nat_translate forward: ipv4 addr: %u\n", *addr);
 		}
 		else {
 			/* ipv6 */
@@ -622,8 +631,10 @@ npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 			addr = &con_ipv6->nt_taddr.word32[0];
 			port = con_ipv6->nt_tport;
 			nt_type = con_ipv6->nt_type;
+			dprintf("npf_nat_translate forward: ipv6\n");
 		}
-	} else {
+	}
+	else {
 		/* "Backwards" stream: use original address/port. */
 		if (likely(con->c_flags & CONN_IPV4)) {
 			/* ipv4 */
@@ -631,6 +642,7 @@ npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 			addr = &con_ipv4->nt_oaddr;
 			port = con_ipv4->nt_oport;
 			nt_type = con_ipv4->nt_type;
+			dprintf("npf_nat_translate backward: ipv4 addr: %u\n", *addr);
 		}
 		else {
 			/* ipv6 */
@@ -638,6 +650,7 @@ npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 			addr = &con_ipv6->nt_oaddr.word32[0];
 			port = con_ipv6->nt_oport;
 			nt_type = con_ipv6->nt_type;
+			dprintf("npf_nat_translate backward: ipv6\n");
 		}
 	}
 
@@ -647,6 +660,7 @@ npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 
 	/* Execute ALG translation first. */
 	if (unlikely((npc->npc_info & NPC_ALG_EXEC) == 0)) {
+		dprintf("npf_alg_exec\n");
 		npc->npc_info |= NPC_ALG_EXEC;
 		npf_alg_exec(npc, con->c_nat, forw);
 		npf_recache(npc);
@@ -667,13 +681,13 @@ npf_nat_algo(npf_cache_t *npc, const npf_natpolicy_t *np, bool forw)
 	int error;
 
 	switch (np->n_algo) {
-	case NPF_ALGO_NPT66:
-		error = npf_npt66_rwr(npc, which, &np->n_taddr,
-		    np->n_tmask, np->n_npt66_adj);
-		break;
-	default:
-		error = npf_napt_rwr(npc, which, &np->n_taddr.word32[0], np->n_tport);
-		break;
+		case NPF_ALGO_NPT66:
+			error = npf_npt66_rwr(npc, which, &np->n_taddr,
+				np->n_tmask, np->n_npt66_adj);
+			break;
+		default:
+			error = npf_napt_rwr(npc, which, &np->n_taddr.word32[0], np->n_tport);
+			break;
 	}
 
 	return error;
@@ -784,7 +798,10 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	}
 
 	/* Determine whether any ALG matches. */
+	dprintf("alg matched -- before\n");
+
 	if (npf_alg_match(npc, nt, di)) {
+		dprintf("alg matched\n");
 		KASSERT(nt->nt_alg != NULL);
 	}
 
@@ -877,9 +894,9 @@ npf_nat_export(prop_dictionary_t condict, npf_nat_t *nt)
 	prop_data_t d;
 
 	natdict = prop_dictionary_create();
-	d = prop_data_create_data(&nt->nt_oaddr, sizeof(npf_addr_t));
+	d = prop_data_create_data(&nt->nt_oaddr, sizeof (npf_addr_t));
 	prop_dictionary_set_and_rel(natdict, "oaddr", d);
-	d = prop_data_create_data(&nt->nt_taddr, sizeof(npf_addr_t));
+	d = prop_data_create_data(&nt->nt_taddr, sizeof (npf_addr_t));
 	prop_dictionary_set_and_rel(natdict, "taddr", d);
 	prop_dictionary_set_uint16(natdict, "oport", nt->nt_oport);
 	prop_dictionary_set_uint16(natdict, "tport", nt->nt_tport);
@@ -892,7 +909,7 @@ npf_nat_export(prop_dictionary_t condict, npf_nat_t *nt)
  */
 npf_nat_t *
 npf_nat_import(npf_cache_t* npc, npf_t *npf, prop_dictionary_t natdict,
-    npf_ruleset_t *natlist, npf_conn_t *con)
+	npf_ruleset_t *natlist, npf_conn_t *con)
 {
 	npf_natpolicy_t *np;
 	npf_nat_t *nt;
@@ -904,23 +921,23 @@ npf_nat_import(npf_cache_t* npc, npf_t *npf, prop_dictionary_t natdict,
 		return NULL;
 	}
 	nt = pool_cache_get(nat_cache, PR_WAITOK);
-	memset(nt, 0, sizeof(npf_nat_t));
+	memset(nt, 0, sizeof (npf_nat_t));
 
 	prop_object_t obj1 = prop_dictionary_get(natdict, "oaddr");
 	if ((d = prop_data_data_nocopy(obj1)) == NULL ||
-	    prop_data_size(obj1) != sizeof(npf_addr_t)) {
+		prop_data_size(obj1) != sizeof (npf_addr_t)) {
 		pool_cache_put(nat_cache, nt);
 		return NULL;
 	}
-	memcpy(&nt->nt_oaddr, d, sizeof(npf_addr_t));
+	memcpy(&nt->nt_oaddr, d, sizeof (npf_addr_t));
 
 	prop_object_t obj2 = prop_dictionary_get(natdict, "taddr");
 	if ((d = prop_data_data_nocopy(obj2)) == NULL ||
-	    prop_data_size(obj2) != sizeof(npf_addr_t)) {
+		prop_data_size(obj2) != sizeof (npf_addr_t)) {
 		pool_cache_put(nat_cache, nt);
 		return NULL;
 	}
-	memcpy(&nt->nt_taddr, d, sizeof(npf_addr_t));
+	memcpy(&nt->nt_taddr, d, sizeof (npf_addr_t));
 
 	prop_dictionary_get_uint16(natdict, "oport", &nt->nt_oport);
 	prop_dictionary_get_uint16(natdict, "tport", &nt->nt_tport);
@@ -931,7 +948,7 @@ npf_nat_import(npf_cache_t* npc, npf_t *npf, prop_dictionary_t natdict,
 
 	/* Take a specific port from port-map. */
 	if ((np->n_flags & NPF_NAT_PORTMAP) != 0 && nt->nt_tport &
-	    !npf_nat_takeport(nt)) {
+		!npf_nat_takeport(nt)) {
 		pool_cache_put(nat_cache, nt);
 		return NULL;
 	}
@@ -957,15 +974,15 @@ npf_nat_dump(const npf_nat_t *nt)
 	struct in_addr ip;
 
 	np = nt->nt_natpolicy;
-	memcpy(&ip, &np->n_taddr, sizeof(ip));
+	memcpy(&ip, &np->n_taddr, sizeof (ip));
 	printf("\tNATP(%p): type %d flags 0x%x taddr %s tport %d\n", np,
-	    np->n_type, np->n_flags, inet_ntoa(ip), ntohs(np->n_tport));
-	memcpy(&ip, &nt->nt_oaddr, sizeof(ip));
+		np->n_type, np->n_flags, inet_ntoa(ip), ntohs(np->n_tport));
+	memcpy(&ip, &nt->nt_oaddr, sizeof (ip));
 	printf("\tNAT: original address %s oport %d tport %d\n",
-	    inet_ntoa(ip), ntohs(nt->nt_oport), ntohs(nt->nt_tport));
+		inet_ntoa(ip), ntohs(nt->nt_oport), ntohs(nt->nt_tport));
 	if (nt->nt_alg) {
 		printf("\tNAT ALG = %p, ARG = %p\n",
-		    nt->nt_alg, (void *)nt->nt_alg_arg);
+			nt->nt_alg, (void *) nt->nt_alg_arg);
 	}
 }
 
@@ -977,7 +994,7 @@ npf_nat_dump(const npf_nat_t *nt)
 void npf_nat_debug_print_ports(npf_nat_t * nat)
 {
 	npf_log("nat_con: orig port %d, transl port %d",
-			  nat->nt_oport, nat->nt_tport);
+		nat->nt_oport, nat->nt_tport);
 }
 
 #endif /* ALEXK_DEBUG */

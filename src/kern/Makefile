@@ -12,7 +12,8 @@ CFLAGS+=	-D__RCSID\(x\)=
 CFLAGS+=	-Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 CFLAGS+=	-Wno-unused
 
-#CFLAGS+=	-DALEXK_DEBUG
+# !! don't forget to uncomment CPPFLAGS defines
+CFLAGS+=	-DALEXK_DEBUG
 #CFLAGS+=	-DALEXK_DEBUG2
 #CFLAGS+=	-DALEXK_DEBUG3
 #CFLAGS+=       -DNPF_DEBUG_COUNTERS
@@ -69,7 +70,7 @@ CPPFLAGS+=	-Wno-unused
 #CPPFLAGS+=	-fno-omit-frame-pointer
 #LDFLAGS+=	-g
 
-#CPPFLAGS+=	-DALEXK_DEBUG
+CPPFLAGS+=	-DALEXK_DEBUG
 #CPPFLAGS+=	-DALEXK_DEBUG2
 #CFLAGS+=	-DALEXK_DEBUG3
 
@@ -108,6 +109,7 @@ OBJS=		$(shell grep ^file files.npf | cut -f2 | \
 		    grep -v npf_ext_ | \
 		    grep -v if_npflog)
 
+OBJS+=		npf_alg_icmp.o
 OBJS+=		stand/bpf_filter.o
 
 OBJS+=		stand/rb.o stand/ptree.o

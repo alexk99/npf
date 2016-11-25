@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: npf_alg_icmp.c,v 1.23 2014/07/20 00:37:41 rmind Exp 
 
 #include "npf_impl.h"
 #include "npf_conn.h"
+#include "npf_alg_icmp.h"
 
 MODULE(MODULE_CLASS_MISC, npf_alg_icmp, "npf");
 
@@ -84,6 +85,7 @@ npfa_icmp_match(npf_cache_t *npc, npf_nat_t *nt, int di)
 
 	/* Check for low TTL.  Also, we support outbound NAT only. */
 	if (ip->ip_ttl > TR_MAX_TTL || di != PFIL_OUT) {
+		dprintf("icmp match false c1\n");
 		return false;
 	}
 
@@ -228,10 +230,12 @@ npfa_icmp_inspect(npf_cache_t *npc, npf_cache_t *enpc)
 	if (npf_iscached(npc, NPC_IP4)) {
 		const struct icmp *ic = npc->npc_l4.icmp;
 		ret = npfa_icmp4_inspect(ic->icmp_type, enpc);
-	} else if (npf_iscached(npc, NPC_IP6)) {
+	} 
+	else if (npf_iscached(npc, NPC_IP6)) {
 		const struct icmp6_hdr *ic6 = npc->npc_l4.icmp6;
 		ret = npfa_icmp6_inspect(ic6->icmp6_type, enpc);
-	} else {
+	} 
+	else {
 		ret = false;
 	}
 	if (!ret) {
@@ -252,6 +256,11 @@ static npf_conn_t *
 npfa_icmp_conn(npf_cache_t *npc, int di)
 {
 	npf_cache_t enpc;
+	
+	enpc.npc_ctx = npc->npc_ctx;
+	enpc.sec = npc->sec;
+	enpc.cpu_thread = npc->cpu_thread;
+	enpc.ifid = npc->ifid;
 
 	/* Inspect ICMP packet for an embedded packet. */
 	if (!npf_iscached(npc, NPC_ICMP))
@@ -300,7 +309,7 @@ npfa_icmp_conn(npf_cache_t *npc, int di)
 	default:
 		return false;
 	}
-
+	
 	/* Lookup a connection using the embedded packet. */
 	return npf_conn_lookup(&enpc, di, &forw);
 }
@@ -315,6 +324,8 @@ npfa_icmp_nat(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 	const u_int which = NPF_SRC;
 	npf_cache_t enpc;
 
+	dprintf("npfa_icmp_nat -- alg translate()");
+	
 	if (forw || !npf_iscached(npc, NPC_ICMP))
 		return false;
 	if (!npfa_icmp_inspect(npc, &enpc))
@@ -348,7 +359,8 @@ npfa_icmp_nat(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 		const struct ip *eip = enpc.npc_ip.v4;
 		ipcksum = eip->ip_sum;
 	}
-	cksum = npf_addr_cksum(cksum, enpc.npc_alen, enpc.npc_ips[which], addr);
+	cksum = npf_addr_cksum(cksum, enpc.npc_alen, enpc.npc_ips[which]->word32, 
+		addr->word32);
 
 	switch (proto) {
 	case IPPROTO_TCP: {
@@ -381,7 +393,7 @@ npfa_icmp_nat(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 	 * XXX: Assumes NPF_NATOUT (source address/port).  Currently,
 	 * npfa_icmp_match() matches only for the PFIL_OUT traffic.
 	 */
-	if (npf_napt_rwr(&enpc, which, addr, port)) {
+	if (npf_napt_rwr(&enpc, which, addr->word32, port)) {
 		return false;
 	}
 
@@ -416,32 +428,32 @@ npfa_icmp_nat(npf_cache_t *npc, npf_nat_t *nt, bool forw)
  */
 
 static int
-npf_alg_icmp_init(void)
+npf_alg_icmp_init(npf_t *npf)
 {
 	static const npfa_funcs_t icmp = {
 		.match		= npfa_icmp_match,
 		.translate	= npfa_icmp_nat,
 		.inspect	= npfa_icmp_conn,
 	};
-	alg_icmp = npf_alg_register("icmp", &icmp);
+	alg_icmp = npf_alg_register(npf, "icmp", &icmp);
 	return alg_icmp ? 0 : ENOMEM;
 }
 
 static int
-npf_alg_icmp_fini(void)
+npf_alg_icmp_fini(npf_t *npf)
 {
 	KASSERT(alg_icmp != NULL);
-	return npf_alg_unregister(alg_icmp);
+	return npf_alg_unregister(npf, alg_icmp);
 }
 
-static int
+int
 npf_alg_icmp_modcmd(modcmd_t cmd, void *arg)
 {
 	switch (cmd) {
 	case MODULE_CMD_INIT:
-		return npf_alg_icmp_init();
+		return npf_alg_icmp_init((npf_t*) arg);
 	case MODULE_CMD_FINI:
-		return npf_alg_icmp_fini();
+		return npf_alg_icmp_fini((npf_t*) arg);
 	case MODULE_CMD_AUTOUNLOAD:
 		return EBUSY;
 	default:

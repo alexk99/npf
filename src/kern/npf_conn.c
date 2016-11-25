@@ -289,6 +289,7 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 			id[NPF_DST] = ic->icmp_id;
 			break;
 		}
+		dprintf("icmp is not chached\n");
 		return 0;
 	case IPPROTO_ICMPV6:
 		if (npf_iscached(npc, NPC_ICMP_ID)) {
@@ -591,9 +592,11 @@ npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
 		return NULL;
 	}
 
+	dprintf("npf_alg_conn()\n");
 	/* Query ALG which may lookup connection for us. */
 	if ((con = npf_alg_conn(npc, di)) != NULL) {
 		/* Note: reference is held. */
+		dprintf("npf_alg_conn() found a connection\n");
 		return con;
 	}
 	if (unlikely(nbuf_head_mbuf(nbuf) == NULL)) {
@@ -729,6 +732,8 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	 */
 	if (unlikely(!npf_conn_conkey(npc, fw, true) ||
 	    !npf_conn_conkey(npc, bk, false))) {
+		
+		dprintf("npf_conn_conkey() failed\n");
 		npf_conn_destroy(npc, npf, con);
 		npf_log("npf_conn_establish() failed: could not create a connection key");
 		return NULL;
