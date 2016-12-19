@@ -770,7 +770,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 		ncon = npf_conn_establish(npc, di, true);
 		if (ncon == NULL) {
 			atomic_dec_uint(&np->n_refcnt);
-			dprintf("nat err ENOMEM\n");
+			dprintf("npf_conn_establish() failed\n");
 			return ENOMEM;
 		}
 		con = ncon;
