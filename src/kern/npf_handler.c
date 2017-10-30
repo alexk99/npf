@@ -228,8 +228,12 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 				continue;
 			}
 		}
-		
+
 		dprintf2("npc_info: %u\n", npc->npc_info);
+
+		dprintf2("npc src ip %d, dst %d\n", npc->npc_ip.v4->ip_src.s_addr,
+				  npc->npc_ip.v4->ip_dst.s_addr);
+
 	}
 
 	step++;
@@ -408,7 +412,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 
 		if ((retfl_v[i] & NPF_RULE_STATEFUL) != 0 && !c) {
 			dprintf2("npc_info step 4: %u\n", npc->npc_info);
-			
+
 			c = npf_conn_establish(npc, di,
 				 (retfl_v[i] & NPF_RULE_MULTIENDS) == 0);
 			if (c) {

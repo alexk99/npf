@@ -1,0 +1,328 @@
+Hi Mindaugas.
+
+I've spent entire weekend trying to find out cuases of the crush I described in my last letter.
+Here what I found.
+
+Gdb complained about frame 0 only because of lack of debug symbols in /lib64/libc.so.6.
+I've installed new libc with debug symbols and gdb succesfully output frame 0 of the backtrace.
+
+	#0  0x00007ffff66aa595 in _int_free () from /lib64/libc.so.6
+
+Now my question about was the bug really in the mempool_free function is gone.
+It was a mempool_free and I think it was trying to double free an already freed connection.
+So I was trying to check everything regarding creation and destroying connection objects and
+I found a bug in the atomic_swap_ptr() that used in the npf_conn_gc().
+The bug can lead to memory leaks and unfortunately doesn't describe the crush in mempool_free()
+therefore the reason of the crush is still unknown.
+
+Here is details about the bug in atomic_swap_ptr().
+
+First, I noticed that following C code evaluates *ptrp twice
+
+		ptrval = *ptrp;
+		oldval = __sync_val_compare_and_swap(ptrp, *ptrp, nval);
+
+so I looked at asm code and found that the second evaluation can cause a memory leack.
+
+atomic_swap_ptr
+npfkern_atomic_swap_ptr
+
+cas loop:
+
+   1 <+49>:    lea    0x10(%r13),%rdx
+   2 <+53>:    xor    %ecx,%ecx
+   3 <+55>:    nopw   0x0(%rax,%rax,1)
+   4 <+64>:    mov    0x10(%r13),%r8
+   5 <+68>:    mov    0x10(%r13),%rax
+   6 <+72>:    lock cmpxchg %rcx,(%rdx)
+   7 <+77>:    cmp    %rax,%r8
+   8 <+80>:    jne    0x7ffff74c7800 <npf_conn_gc+64>
+
+Some updates being made by concurrent writers can be rewtitten.
+Imagine the following scenario:
+
+  1) thread 1 read the target value from address 0x10(%r13) into r8 (line 4)
+  2) thread 2 update the target value on address 0x10(%r13)
+  3) thread 1 read the new updated target value from address 0x10(%r13) into rax (line 5)
+  		now rx != r8
+  4) thread 1 lock cmpxchg sucessfully update the target since rax == target value
+  5) thread 1 goto step 1 since it makes additional cmp (line 7) and thinks it failed (r8 != rax),
+  	but cmpxchg was successull !!! and we never return the old value that this cmpxchg store into the target =>> BUG!!
+
+I think the solution is simple: don't read *ptrp second time and use already calculated ptrval.
+
+	do {                                                         
+		ptrval = *ptrp;                                          
+		oldval = __sync_val_compare_and_swap(ptrp, ptrval, nval);
+	} while (oldval != ptrval);                                  
+	
+This new C code	is compiled into new asm code:
+	
+   1 18641:    lea    0x10(%r13),%rdx
+   2 18645:    xor    %ecx,%ecx
+   3 18647:    nopw   0x0(%rax,%rax,1)
+   4 18650:    mov    0x10(%r13),%r8
+   5 18654:    mov    %r8,%rax
+   6 18657:    lock cmpxchg %rcx,(%rdx)
+   7 1865c:    cmp    %rax,%r8
+   8 1865f:    jne    18650 <npf_conn_gc+0x40>
+
+Now r8 and rax will contain the same value, so the second cmp will not
+cause a new cas loop iteration when there is no need to it.
+
+By the way, why there is a second cmp in the code? There is no need to it since 
+lock cmpxchg indicates it's success by modifing ZF flag that is checked in the following
+jne.
+
+This is the entire asm code of the npf_conn_gc() where atomic_swap_ptr was inlined.
+
+(gdb) disas npf_conn_gc
+Dump of assembler code for function npf_conn_gc:
+   0x00007ffff74c77c0 <+0>:     push   %r15
+   0x00007ffff74c77c2 <+2>:     push   %r14
+   0x00007ffff74c77c4 <+4>:     push   %r13
+   0x00007ffff74c77c6 <+6>:     push   %r12
+   0x00007ffff74c77c8 <+8>:     mov    %rdx,%r13
+   0x00007ffff74c77cb <+11>:    push   %rbp
+   0x00007ffff74c77cc <+12>:    push   %rbx
+   0x00007ffff74c77cd <+13>:    mov    %rsi,%rbp
+   0x00007ffff74c77d0 <+16>:    sub    $0x58,%rsp
+   0x00007ffff74c77d4 <+20>:    lea    0x30(%rsp),%rsi
+   0x00007ffff74c77d9 <+25>:    mov    %rdi,0x8(%rsp)
+   0x00007ffff74c77de <+30>:    mov    $0x1,%edi
+   0x00007ffff74c77e3 <+35>:    mov    %cl,0x23(%rsp)
+   0x00007ffff74c77e7 <+39>:    mov    %r8d,0x24(%rsp)
+   0x00007ffff74c77ec <+44>:    callq  0x7ffff74b3760 <clock_gettime@plt>
+   0x00007ffff74c77f1 <+49>:    lea    0x10(%r13),%rdx
+   0x00007ffff74c77f5 <+53>:    xor    %ecx,%ecx
+   0x00007ffff74c77f7 <+55>:    nopw   0x0(%rax,%rax,1)
+   0x00007ffff74c7800 <+64>:    mov    0x10(%r13),%r8
+   0x00007ffff74c7804 <+68>:    mov    0x10(%r13),%rax
+   0x00007ffff74c7808 <+72>:    lock cmpxchg %rcx,(%rdx)
+   0x00007ffff74c780d <+77>:    cmp    %rax,%r8
+   0x00007ffff74c7810 <+80>:    jne    0x7ffff74c7800 <npf_conn_gc+64>
+   0x00007ffff74c7812 <+82>:    mov    0x20(%r13),%rax
+   0x00007ffff74c7816 <+86>:    test   %rax,%rax
+   0x00007ffff74c7819 <+89>:    je     0x7ffff74c7b96 <npf_conn_gc+982>
+   0x00007ffff74c781f <+95>:    mov    0x18(%r13),%r15
+   0x00007ffff74c7823 <+99>:    mov    %r8,0x50(%rax)
+   0x00007ffff74c7827 <+103>:   xor    %ebx,%ebx
+   0x00007ffff74c7829 <+105>:   test   %r15,%r15
+   0x00007ffff74c782c <+108>:   je     0x7ffff74c7ba2 <npf_conn_gc+994>
+   0x00007ffff74c7832 <+114>:   xor    %r14d,%r14d
+   0x00007ffff74c7835 <+117>:   mov    %r15,%r12
+   0x00007ffff74c7838 <+120>:   mov    %rbp,0x28(%rsp)
+   0x00007ffff74c783d <+125>:   mov    %r13,0x18(%rsp)
+   0x00007ffff74c7842 <+130>:   jmp    0x7ffff74c7885 <npf_conn_gc+197>
+   0x00007ffff74c7844 <+132>:   nopl   0x0(%rax)
+   0x00007ffff74c7848 <+136>:   cmp    $0x11,%edx
+   0x00007ffff74c784b <+139>:   je     0x7ffff74c7a70 <npf_conn_gc+688>
+   0x00007ffff74c7851 <+145>:   cmp    $0x1,%edx
+   0x00007ffff74c7854 <+148>:   je     0x7ffff74c7a70 <npf_conn_gc+688>
+   0x00007ffff74c785a <+154>:   xor    %ecx,%ecx
+   0x00007ffff74c785c <+156>:   mov    0x4(%r12),%edx
+   0x00007ffff74c7861 <+161>:   test   $0x10,%dl
+   0x00007ffff74c7864 <+164>:   jne    0x7ffff74c78b8 <npf_conn_gc+248>
+   0x00007ffff74c7866 <+166>:   sub    0x30(%r12),%eax
+   0x00007ffff74c786b <+171>:   cmp    %ecx,%eax
+   0x00007ffff74c786d <+173>:   jg     0x7ffff74c78b8 <npf_conn_gc+248>
+   0x00007ffff74c786f <+175>:   cmpb   $0x0,0x23(%rsp)
+   0x00007ffff74c7874 <+180>:   jne    0x7ffff74c78b8 <npf_conn_gc+248>
+   0x00007ffff74c7876 <+182>:   test   %rbp,%rbp
+   0x00007ffff74c7879 <+185>:   mov    %r12,%r14
+   0x00007ffff74c787c <+188>:   mov    %rbp,%r12
+   0x00007ffff74c787f <+191>:   je     0x7ffff74c7926 <npf_conn_gc+358>
+   0x00007ffff74c7885 <+197>:   mov    0x38(%r12),%edx
+   0x00007ffff74c788a <+202>:   mov    0x50(%r12),%rbp
+   0x00007ffff74c788f <+207>:   mov    0x30(%rsp),%rax
+   0x00007ffff74c7894 <+212>:   mov    0xc(%r12),%ecx
+   0x00007ffff74c7899 <+217>:   cmp    $0x6,%edx
+   0x00007ffff74c789c <+220>:   jne    0x7ffff74c7848 <npf_conn_gc+136>
+---Type <return> to continue, or q <return> to quit---
+   0x00007ffff74c789e <+222>:   lea    0x4b1b(%rip),%rdx        # 0x7ffff74cc3c0 <npf_tcp_timeouts>
+   0x00007ffff74c78a5 <+229>:   mov    (%rdx,%rcx,4),%ecx
+   0x00007ffff74c78a8 <+232>:   mov    0x4(%r12),%edx
+   0x00007ffff74c78ad <+237>:   test   $0x10,%dl
+   0x00007ffff74c78b0 <+240>:   je     0x7ffff74c7866 <npf_conn_gc+166>
+   0x00007ffff74c78b2 <+242>:   nopw   0x0(%rax,%rax,1)
+   0x00007ffff74c78b8 <+248>:   and    $0x40,%edx
+   0x00007ffff74c78bb <+251>:   je     0x7ffff74c7b00 <npf_conn_gc+832>
+   0x00007ffff74c78c1 <+257>:   lea    0x78(%r12),%rax
+   0x00007ffff74c78c6 <+262>:   lea    0x68(%r12),%r15
+   0x00007ffff74c78cb <+267>:   mov    $0x10,%r13d
+   0x00007ffff74c78d1 <+273>:   movl   $0x4,(%rsp)
+   0x00007ffff74c78d8 <+280>:   mov    %rax,0x10(%rsp)
+   0x00007ffff74c78dd <+285>:   mov    %r12,%rdi
+   0x00007ffff74c78e0 <+288>:   callq  0x7ffff74b3c70 <pthread_spin_lock@plt>
+   0x00007ffff74c78e5 <+293>:   testb  $0x20,0x4(%r12)
+   0x00007ffff74c78eb <+299>:   je     0x7ffff74c7a80 <npf_conn_gc+704>
+   0x00007ffff74c78f1 <+305>:   lock orl $0x30,0x4(%r12)
+   0x00007ffff74c78f8 <+312>:   mov    %r12,%rdi
+   0x00007ffff74c78fb <+315>:   callq  0x7ffff74b3940 <pthread_spin_unlock@plt>
+   0x00007ffff74c7900 <+320>:   test   %r14,%r14
+   0x00007ffff74c7903 <+323>:   mov    0x50(%r12),%rax
+   0x00007ffff74c7908 <+328>:   je     0x7ffff74c7ae8 <npf_conn_gc+808>
+   0x00007ffff74c790e <+334>:   mov    %rax,0x50(%r14)
+   0x00007ffff74c7912 <+338>:   test   %rbp,%rbp
+   0x00007ffff74c7915 <+341>:   mov    %rbx,0x50(%r12)
+   0x00007ffff74c791a <+346>:   mov    %r12,%rbx
+   0x00007ffff74c791d <+349>:   mov    %rbp,%r12
+   0x00007ffff74c7920 <+352>:   jne    0x7ffff74c7885 <npf_conn_gc+197>
+   0x00007ffff74c7926 <+358>:   cmpb   $0x0,0x24(%rsp)
+   0x00007ffff74c792b <+363>:   mov    0x18(%rsp),%r13
+   0x00007ffff74c7930 <+368>:   mov    0x28(%rsp),%rbp
+   0x00007ffff74c7935 <+373>:   mov    %r14,0x20(%r13)
+   0x00007ffff74c7939 <+377>:   jne    0x7ffff74c7b27 <npf_conn_gc+871>
+   0x00007ffff74c793f <+383>:   mov    0x28(%rbp),%r12
+   0x00007ffff74c7943 <+387>:   movq   $0x0,0x40(%rsp)
+   0x00007ffff74c794c <+396>:   lea    0x40(%rsp),%r14
+   0x00007ffff74c7951 <+401>:   movq   $0x2710,0x48(%rsp)
+   0x00007ffff74c795a <+410>:   mov    %r12,%rdi
+   0x00007ffff74c795d <+413>:   callq  0x7ffff74b37a0 <qsbr_barrier@plt>
+   0x00007ffff74c7962 <+418>:   mov    %rax,%r13
+   0x00007ffff74c7965 <+421>:   jmp    0x7ffff74c797a <npf_conn_gc+442>
+   0x00007ffff74c7967 <+423>:   nopw   0x0(%rax,%rax,1)
+   0x00007ffff74c7970 <+432>:   xor    %esi,%esi
+   0x00007ffff74c7972 <+434>:   mov    %r14,%rdi
+   0x00007ffff74c7975 <+437>:   callq  0x7ffff74b3850 <nanosleep@plt>
+   0x00007ffff74c797a <+442>:   mov    %r13,%rsi
+   0x00007ffff74c797d <+445>:   mov    %r12,%rdi
+   0x00007ffff74c7980 <+448>:   callq  0x7ffff74b37c0 <qsbr_sync@plt>
+   0x00007ffff74c7985 <+453>:   test   %al,%al
+   0x00007ffff74c7987 <+455>:   je     0x7ffff74c7970 <npf_conn_gc+432>
+   0x00007ffff74c7989 <+457>:   test   %rbx,%rbx
+   0x00007ffff74c798c <+460>:   je     0x7ffff74c7a5a <npf_conn_gc+666>
+   0x00007ffff74c7992 <+466>:   nopw   0x0(%rax,%rax,1)
+   0x00007ffff74c7998 <+472>:   mov    0x40(%rbx),%rdx
+   0x00007ffff74c799c <+476>:   mov    0x50(%rbx),%rax
+   0x00007ffff74c79a0 <+480>:   test   %rdx,%rdx
+   0x00007ffff74c79a3 <+483>:   mov    %rax,(%rsp)
+   0x00007ffff74c79a7 <+487>:   je     0x7ffff74c79b6 <npf_conn_gc+502>
+   0x00007ffff74c79a9 <+489>:   mov    0x8(%rsp),%rdi
+   0x00007ffff74c79ae <+494>:   mov    %rbp,%rsi
+---Type <return> to continue, or q <return> to quit---
+   0x00007ffff74c79b1 <+497>:   callq  0x7ffff74caa80 <npf_nat_destroy>
+   0x00007ffff74c79b6 <+502>:   mov    0x48(%rbx),%r15
+   0x00007ffff74c79ba <+506>:   test   %r15,%r15
+   0x00007ffff74c79bd <+509>:   je     0x7ffff74c7a12 <npf_conn_gc+594>
+   0x00007ffff74c79bf <+511>:   lock subl $0x1,0x4(%r15)
+   0x00007ffff74c79c5 <+517>:   jne    0x7ffff74c7a12 <npf_conn_gc+594>
+   0x00007ffff74c79c7 <+519>:   mov    0x8(%r15),%eax
+   0x00007ffff74c79cb <+523>:   xor    %r14d,%r14d
+   0x00007ffff74c79ce <+526>:   lea    0x10(%r15),%r12
+   0x00007ffff74c79d2 <+530>:   test   %eax,%eax
+   0x00007ffff74c79d4 <+532>:   je     0x7ffff74c7a0a <npf_conn_gc+586>
+   0x00007ffff74c79d6 <+534>:   nopw   %cs:0x0(%rax,%rax,1)
+   0x00007ffff74c79e0 <+544>:   mov    (%r12),%r13
+   0x00007ffff74c79e4 <+548>:   mov    0x80(%r12),%rsi
+   0x00007ffff74c79ec <+556>:   mov    %r15,%rdi
+   0x00007ffff74c79ef <+559>:   mov    0x30(%r13),%rcx
+   0x00007ffff74c79f3 <+563>:   callq  *0x18(%rcx)
+   0x00007ffff74c79f6 <+566>:   lock subl $0x1,0x38(%r13)
+   0x00007ffff74c79fc <+572>:   add    $0x1,%r14d
+   0x00007ffff74c7a00 <+576>:   add    $0x8,%r12
+   0x00007ffff74c7a04 <+580>:   cmp    0x8(%r15),%r14d
+   0x00007ffff74c7a08 <+584>:   jb     0x7ffff74c79e0 <npf_conn_gc+544>
+   0x00007ffff74c7a0a <+586>:   mov    %r15,%rdi
+   0x00007ffff74c7a0d <+589>:   callq  0x7ffff74b3770 <free@plt>
+   0x00007ffff74c7a12 <+594>:   movl   $0x0,0xc(%rbx)
+   0x00007ffff74c7a19 <+601>:   mov    %rbx,%rdi
+   0x00007ffff74c7a1c <+604>:   callq  0x7ffff74b3a50 <pthread_spin_destroy@plt>
+   0x00007ffff74c7a21 <+609>:   testb  $0x40,0x4(%rbx)
+   0x00007ffff74c7a25 <+613>:   je     0x7ffff74c7ad0 <npf_conn_gc+784>
+   0x00007ffff74c7a2b <+619>:   mov    0x60(%rbp),%rdi
+   0x00007ffff74c7a2f <+623>:   mov    %rbx,%rsi
+   0x00007ffff74c7a32 <+626>:   callq  0x7ffff74bd060 <mempool_free>
+   0x00007ffff74c7a37 <+631>:   mov    0x8(%rsp),%rax
+   0x00007ffff74c7a3c <+636>:   mov    (%rsp),%rbx
+   0x00007ffff74c7a40 <+640>:   movzbl 0x42(%rax),%edx
+   0x00007ffff74c7a44 <+644>:   mov    0x58(%rbp),%rax
+   0x00007ffff74c7a48 <+648>:   mov    (%rax,%rdx,8),%rax
+   0x00007ffff74c7a4c <+652>:   addq   $0x1,0x30(%rax)
+   0x00007ffff74c7a51 <+657>:   test   %rbx,%rbx
+   0x00007ffff74c7a54 <+660>:   jne    0x7ffff74c7998 <npf_conn_gc+472>
+   0x00007ffff74c7a5a <+666>:   add    $0x58,%rsp
+   0x00007ffff74c7a5e <+670>:   pop    %rbx
+   0x00007ffff74c7a5f <+671>:   pop    %rbp
+   0x00007ffff74c7a60 <+672>:   pop    %r12
+   0x00007ffff74c7a62 <+674>:   pop    %r13
+   0x00007ffff74c7a64 <+676>:   pop    %r14
+   0x00007ffff74c7a66 <+678>:   pop    %r15
+   0x00007ffff74c7a68 <+680>:   retq
+   0x00007ffff74c7a69 <+681>:   nopl   0x0(%rax)
+   0x00007ffff74c7a70 <+688>:   lea    0x4979(%rip),%rdx        # 0x7ffff74cc3f0 <npf_generic_timeout>
+   0x00007ffff74c7a77 <+695>:   mov    (%rdx,%rcx,4),%ecx
+   0x00007ffff74c7a7a <+698>:   jmpq   0x7ffff74c785c <npf_conn_gc+156>
+   0x00007ffff74c7a7f <+703>:   nop
+   0x00007ffff74c7a80 <+704>:   mov    %r13,%rsi
+   0x00007ffff74c7a83 <+707>:   mov    %r15,%rdi
+   0x00007ffff74c7a86 <+710>:   callq  0x7ffff74b3b20 <_Z10CityHash64PKcm@plt>
+   0x00007ffff74c7a8b <+715>:   mov    (%rsp),%edx
+   0x00007ffff74c7a8e <+718>:   mov    0x18(%rsp),%rdi
+   0x00007ffff74c7a93 <+723>:   mov    %rax,%rcx
+   0x00007ffff74c7a96 <+726>:   mov    %r15,%rsi
+   0x00007ffff74c7a99 <+729>:   callq  0x7ffff74c2060 <npf_conndb_remove>
+---Type <return> to continue, or q <return> to quit---
+   0x00007ffff74c7a9e <+734>:   mov    0x10(%rsp),%r15
+   0x00007ffff74c7aa3 <+739>:   mov    %r13,%rsi
+   0x00007ffff74c7aa6 <+742>:   mov    %r15,%rdi
+   0x00007ffff74c7aa9 <+745>:   callq  0x7ffff74b3b20 <_Z10CityHash64PKcm@plt>
+   0x00007ffff74c7aae <+750>:   mov    (%rsp),%edx
+   0x00007ffff74c7ab1 <+753>:   mov    0x18(%rsp),%rdi
+   0x00007ffff74c7ab6 <+758>:   mov    %rax,%rcx
+   0x00007ffff74c7ab9 <+761>:   mov    %r15,%rsi
+   0x00007ffff74c7abc <+764>:   callq  0x7ffff74c2060 <npf_conndb_remove>
+   0x00007ffff74c7ac1 <+769>:   jmpq   0x7ffff74c78f1 <npf_conn_gc+305>
+   0x00007ffff74c7ac6 <+774>:   nopw   %cs:0x0(%rax,%rax,1)
+   0x00007ffff74c7ad0 <+784>:   mov    0x68(%rbp),%rdi
+   0x00007ffff74c7ad4 <+788>:   mov    %rbx,%rsi
+   0x00007ffff74c7ad7 <+791>:   callq  0x7ffff74bd060 <mempool_free>
+   0x00007ffff74c7adc <+796>:   jmpq   0x7ffff74c7a37 <npf_conn_gc+631>
+   0x00007ffff74c7ae1 <+801>:   nopl   0x0(%rax)
+   0x00007ffff74c7ae8 <+808>:   mov    0x18(%rsp),%rdx
+   0x00007ffff74c7aed <+813>:   mov    %rax,0x18(%rdx)
+   0x00007ffff74c7af1 <+817>:   jmpq   0x7ffff74c7912 <npf_conn_gc+338>
+   0x00007ffff74c7af6 <+822>:   nopw   %cs:0x0(%rax,%rax,1)
+   0x00007ffff74c7b00 <+832>:   lea    0xa8(%r12),%rax
+   0x00007ffff74c7b08 <+840>:   lea    0x80(%r12),%r15
+   0x00007ffff74c7b10 <+848>:   mov    $0x28,%r13d
+   0x00007ffff74c7b16 <+854>:   movl   $0xa,(%rsp)
+   0x00007ffff74c7b1d <+861>:   mov    %rax,0x10(%rsp)
+   0x00007ffff74c7b22 <+866>:   jmpq   0x7ffff74c78dd <npf_conn_gc+285>
+   0x00007ffff74c7b27 <+871>:   lea    0x4c(%rbp),%rdi
+   0x00007ffff74c7b2b <+875>:   callq  0x7ffff74b3940 <pthread_spin_unlock@plt>
+   0x00007ffff74c7b30 <+880>:   test   %rbx,%rbx
+   0x00007ffff74c7b33 <+883>:   je     0x7ffff74c793f <npf_conn_gc+383>
+   0x00007ffff74c7b39 <+889>:   mov    %rbp,%rdi
+   0x00007ffff74c7b3c <+892>:   lea    0x40(%rsp),%r14
+   0x00007ffff74c7b41 <+897>:   callq  0x7ffff74b3cf0 <pthread_mutex_lock@plt>
+   0x00007ffff74c7b46 <+902>:   mov    0x28(%rbp),%r12
+   0x00007ffff74c7b4a <+906>:   movq   $0x0,0x40(%rsp)
+   0x00007ffff74c7b53 <+915>:   movq   $0x2710,0x48(%rsp)
+   0x00007ffff74c7b5c <+924>:   mov    %r12,%rdi
+   0x00007ffff74c7b5f <+927>:   callq  0x7ffff74b37a0 <qsbr_barrier@plt>
+   0x00007ffff74c7b64 <+932>:   mov    %rax,%r13
+   0x00007ffff74c7b67 <+935>:   jmp    0x7ffff74c7b7a <npf_conn_gc+954>
+   0x00007ffff74c7b69 <+937>:   nopl   0x0(%rax)
+   0x00007ffff74c7b70 <+944>:   xor    %esi,%esi
+   0x00007ffff74c7b72 <+946>:   mov    %r14,%rdi
+   0x00007ffff74c7b75 <+949>:   callq  0x7ffff74b3850 <nanosleep@plt>
+   0x00007ffff74c7b7a <+954>:   mov    %r13,%rsi
+   0x00007ffff74c7b7d <+957>:   mov    %r12,%rdi
+   0x00007ffff74c7b80 <+960>:   callq  0x7ffff74b37c0 <qsbr_sync@plt>
+   0x00007ffff74c7b85 <+965>:   test   %al,%al
+   0x00007ffff74c7b87 <+967>:   je     0x7ffff74c7b70 <npf_conn_gc+944>
+   0x00007ffff74c7b89 <+969>:   mov    %rbp,%rdi
+   0x00007ffff74c7b8c <+972>:   callq  0x7ffff74b3a10 <pthread_mutex_unlock@plt>
+   0x00007ffff74c7b91 <+977>:   jmpq   0x7ffff74c793f <npf_conn_gc+383>
+   0x00007ffff74c7b96 <+982>:   mov    %r8,0x18(%r13)
+   0x00007ffff74c7b9a <+986>:   mov    %r8,%r15
+   0x00007ffff74c7b9d <+989>:   jmpq   0x7ffff74c7827 <npf_conn_gc+103>
+   0x00007ffff74c7ba2 <+994>:   cmpb   $0x0,0x24(%rsp)
+   0x00007ffff74c7ba7 <+999>:   movq   $0x0,0x20(%r13)
+   0x00007ffff74c7baf <+1007>:  je     0x7ffff74c793f <npf_conn_gc+383>
+   0x00007ffff74c7bb5 <+1013>:  lea    0x4c(%rbp),%rdi
+   0x00007ffff74c7bb9 <+1017>:  callq  0x7ffff74b3940 <pthread_spin_unlock@plt>
+   0x00007ffff74c7bbe <+1022>:  jmpq   0x7ffff74c793f <npf_conn_gc+383>
+---Type <return> to continue, or q <return> to quit---
+End of assembler dump.

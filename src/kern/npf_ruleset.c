@@ -821,14 +821,21 @@ npf_rule_inspect(const npf_rule_t *rl, bpf_args_t *bc_args,
 
 	/* Match the interface. */
 	if (rl->r_ifid && rl->r_ifid != ifid) {
+		dprintf("rule inspect: interface doesn't match\n");
 		return false;
 	}
 
 	/* Match the direction. */
 	if ((rl->r_attr & NPF_RULE_DIMASK) != NPF_RULE_DIMASK) {
-		if ((rl->r_attr & di_mask) == 0)
+		if ((rl->r_attr & di_mask) == 0) {
+			dprintf("rule inspect: direction doesn't match: rule di: %d, di_mask: %d\n",
+					  rl->r_attr, di_mask);
 			return false;
+		}
 	}
+
+	dprintf("rule inspect: direction match: rule di: %d, di_mask: %d\n",
+			  rl->r_attr, di_mask);
 
 	/* Any code? */
 	if (!rl->r_code) {
@@ -836,6 +843,7 @@ npf_rule_inspect(const npf_rule_t *rl, bpf_args_t *bc_args,
 		return true;
 	}
 	KASSERT(rl->r_type == NPF_CODE_BPF);
+	dprintf("rule inspect: run bpf code\n");
 	return npf_bpf_filter(bc_args, rl->r_code, rl->r_jcode) != 0;
 }
 

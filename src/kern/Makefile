@@ -72,7 +72,7 @@ CPPFLAGS+=	-Wno-unused
 
 #CPPFLAGS+=	-DALEXK_DEBUG
 #CPPFLAGS+=	-DALEXK_DEBUG2
-#CFLAGS+=	-DALEXK_DEBUG3
+#CPPFLAGS+=	-DALEXK_DEBUG3
 
 #
 # WARNING: All symbols must be hidden by default to not conflict with

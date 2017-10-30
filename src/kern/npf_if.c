@@ -90,7 +90,7 @@ npf_ifmap_new(npf_t *npf)
 			return i + 1;
 
 	if (npf->ifmap_cnt == NPF_MAX_IFMAP) {
-		printf("npf_ifmap_new: out of slots; bump NPF_MAX_IFMAP\n");
+		dprintf("npf_ifmap_new: out of slots; bump NPF_MAX_IFMAP\n");
 		return 0;
 	}
 	return ++npf->ifmap_cnt;

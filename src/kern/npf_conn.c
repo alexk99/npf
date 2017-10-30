@@ -689,7 +689,6 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	con = pool_cache_get(con_pool, PR_NOWAIT);
 	if (unlikely(!con)) {
 		npf_worker_signal(npf);
-		printf("no free pool entries\n");
 		return NULL;
 	}
 	NPF_PRINTF(("NPF: create conn %p\n", con));
@@ -732,7 +731,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	 */
 	if (unlikely(!npf_conn_conkey(npc, fw, true) ||
 	    !npf_conn_conkey(npc, bk, false))) {
-		
+
 		dprintf("npf_conn_conkey() failed\n");
 		npf_conn_destroy(npc, npf, con);
 		npf_log("npf_conn_establish() failed: could not create a connection key");
@@ -925,6 +924,18 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 
 	/* Finally, re-insert the "backwards" entry. */
 	hv = npf_conndb_hash(npf->conn_db, bk, key_nwords);
+
+	/* Update particial hash collision flag */
+	uint32_t back_entry_particial_hash = (uint32_t) hv & 0xFFFFFFFF;
+	if (unlikely(back_entry_particial_hash == con->c_forw_entry_particial_hash)) {
+		/* up the collision bit */
+		atomic_or_uint(&con->c_flags, CONN_PARTICIAL_HASH_COLLISION);
+	}
+	else {
+		/* clear the collision bit */
+		atomic_and_uint(&con->c_flags, ~CONN_PARTICIAL_HASH_COLLISION);
+	}
+
 	if (!npf_conndb_insert(npf->conn_db, bk, key_nwords, hv, con)) {
 		/*
 		 * Race: we have hit the duplicate, remove the "forwards"
@@ -939,18 +950,6 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 
 		npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_RACE_NAT);
 		return EISCONN;
-	}
-
-	/* Update particial hash collision flag */
-	uint32_t back_entry_particial_hash = (uint32_t) hv & 0xFFFFFFFF;
-
-	if (unlikely(back_entry_particial_hash == con->c_forw_entry_particial_hash)) {
-		/* up the collision bit */
-		atomic_or_uint(&con->c_flags, CONN_PARTICIAL_HASH_COLLISION);
-	}
-	else {
-		/* clear the collision bit */
-		atomic_and_uint(&con->c_flags, ~CONN_PARTICIAL_HASH_COLLISION);
 	}
 
 	/* Associate the NAT entry and release the lock. */
