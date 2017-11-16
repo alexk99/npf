@@ -154,7 +154,11 @@ void		npf_conn_fini(npf_t *);
 void		npf_conn_tracking(npf_t *, bool);
 void		npf_conn_load(npf_t *, npf_conndb_t *, bool);
 
-unsigned	npf_conn_conkey(const npf_cache_t *, uint32_t *, bool);
+unsigned	
+npf_conn_conkey(const npf_cache_t *, uint32_t *, bool);
+
+void
+npf_conn_conkey_print(uint32_t *key, const char* pref);
 
 npf_conn_t *
 npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw);

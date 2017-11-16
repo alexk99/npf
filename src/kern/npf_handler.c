@@ -131,7 +131,7 @@ npf_reassembly(npf_t *npf, npf_cache_t *npc, struct mbuf **mp)
 #define PH_STEP_BLOCK 6
 #define PH_STEP_OUT 7
 
-#define PKT_VEC_SIZE 64
+#define PKT_VEC_SIZE 32
 
 typedef void *	(*mbuf_getdata_cb_t)(const struct mbuf *);
 
@@ -584,14 +584,11 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 	int error, retfl;
 	int decision;
 
-	// return 0; // return #0
-
 	/* QSBR checkpoint. */
 	pserialize_checkpoint(npf->qsbr);
 	KASSERT(ifp != NULL);
 
 	dprintf("npf_packet_handler\n");
-	// return 0; // return #1
 
 	/*
 	 * Initialise packet information cache.
@@ -610,8 +607,6 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 	retfl = 0;
 	rp = NULL;
 
-	// return 0; // return #2
-
 	/* Cache everything.  Determine whether it is an IP fragment. */
 	if (unlikely(npf_cache_all(&npc) & NPC_IPFRAG)) {
 		/*
@@ -628,13 +623,9 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 		}
 	}
 
-	// return 0; // return #3
-
 	dprintf("connection inspect\n");
 	/* Inspect the list of connections (if found, acquires a reference). */
 	con = npf_conn_inspect(&npc, di, &error);
-
-	// return 0; // return #4
 
 	/* If "passing" connection found - skip the ruleset inspection. */
 	if (con && npf_conn_pass(con, &rp)) {

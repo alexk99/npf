@@ -272,16 +272,17 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 		th = npc->npc_l4.tcp;
 		id[NPF_SRC] = th->th_sport;
 		id[NPF_DST] = th->th_dport;
-
 		dprintf("tcp sport = %d, dport = %d\n", th->th_sport, th->th_dport);
-
 		break;
+
 	case IPPROTO_UDP:
 		KASSERT(npf_iscached(npc, NPC_UDP));
 		uh = npc->npc_l4.udp;
 		id[NPF_SRC] = uh->uh_sport;
 		id[NPF_DST] = uh->uh_dport;
+		dprintf("udp sport = %d, dport = %d\n", uh->uh_sport, uh->uh_dport);
 		break;
+
 	case IPPROTO_ICMP:
 		if (npf_iscached(npc, NPC_ICMP_ID)) {
 			const struct icmp *ic = npc->npc_l4.icmp;
@@ -330,13 +331,22 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 		key[2] = npc->npc_ips[isrc]->word32[0];
 		key[3] = npc->npc_ips[idst]->word32[0];
 		keylen = 4 * sizeof(uint32_t);
-	} else {
+	}
+	else {
 		const u_int nwords = alen >> 2;
 		memcpy(&key[2], npc->npc_ips[isrc], alen);
 		memcpy(&key[2 + nwords], npc->npc_ips[idst], alen);
 		keylen = (2 + (nwords * 2)) * sizeof(uint32_t);
 	}
 	return keylen;
+}
+
+void
+npf_conn_conkey_print(uint32_t *key, const char* pref)
+{
+	uint16_t *p = (uint16_t *) key;
+	printf("%s, 0: %hu, 1:%hu, 2:%hu, 3:%hu, src: %u, dst: %u\n", pref, p[0],
+			  p[1], p[2], p[3], key[2], key[3]);
 }
 
 static __inline void
@@ -409,8 +419,13 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 		return NULL;
 	}
 
+//	char pref[256];
+//	sprintf(pref, "core %hhu: lookup key", npc->cpu_thread);
+//	npf_conn_conkey_print(k, pref);
+
 	npf_conn_t* con = npf_conndb_lookup(npf->conn_db, k, key_nwords, forw);
 	if (con == NULL) {
+//		printf("%s key not found\n", pref);
 		return NULL;
 	}
 	KASSERT(npc->npc_proto == con->c_proto);
@@ -419,6 +434,7 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 	u_int flags = con->c_flags;
 	bool ok = (flags & (CONN_ACTIVE | CONN_EXPIRE)) == CONN_ACTIVE;
 	if (unlikely(!ok)) {
+//		printf("%s conn is found, but it's not active\n", pref);
 		return NULL;
 	}
 
@@ -431,6 +447,7 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 	dprintf("c_ifid: c_ifid %d, packet_ifid: %d\n", cifid, ifid);
 
 	if (unlikely(cifid && cifid != ifid)) {
+//		printf("%s id mismatch\n", pref);
 		return NULL;
 	}
 
@@ -438,11 +455,13 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 	dprintf("flags %d, di %d, forw %d, pforw %d\n", flags, di, *forw, pforw);
 
 	if (unlikely(*forw != pforw)) {
+//		printf("%s forw mismatch\n", pref);
 		return NULL;
 	}
 
 	/* Update the last activity time. */
 	conn_update_atime(npc, con);
+//	printf("%s found\n", pref);
 	return con;
 }
 
@@ -757,6 +776,12 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 			  (c_back_entry_particial_hash == con->c_forw_entry_particial_hash);
 	con->c_flags |= hash_collision_flag;
 
+//	char pref[256];
+//	sprintf(pref, "core %hhu: fw", npc->cpu_thread);
+//	npf_conn_conkey_print(fw, pref);
+//	sprintf(pref, "core %hhu: bk", npc->cpu_thread);
+//	npf_conn_conkey_print(bk, pref);
+
 	/*
 	 * Insert both keys (entries representing directions) of the
 	 * connection.  At this point it becomes visible, but we activate
@@ -766,6 +791,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 
 	if (unlikely(!npf_conndb_insert(npf->conn_db, fw, key_nwords,
 			  fw_key_hash, con))) {
+//		printf("core %hhu: fw conndb insert failed\n", npc->cpu_thread);
 		error = EISCONN;
 		goto err;
 	}
@@ -776,6 +802,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords, fw_key_hash);
 		KASSERT(ret == con);
 		error = EISCONN;
+//		printf("core %hhu: bk conndb insert failed\n", npc->cpu_thread);
 		goto err;
 	}
 
