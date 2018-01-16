@@ -419,22 +419,24 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 		return NULL;
 	}
 
-//	char pref[256];
-//	sprintf(pref, "core %hhu: lookup key", npc->cpu_thread);
-//	npf_conn_conkey_print(k, pref);
+#ifdef ALEXK_DEBUG
+	char pref[256];
+	sprintf(pref, "core %hhu: lookup key", npc->cpu_thread);
+	npf_conn_conkey_print(k, pref);
+#endif
 
 	npf_conn_t* con = npf_conndb_lookup(npf->conn_db, k, key_nwords, forw);
 	if (con == NULL) {
-//		printf("%s key not found\n", pref);
+		dprintf("%s key not found\n", pref);
 		return NULL;
 	}
-	KASSERT(npc->npc_proto == con->c_proto);
+	// KASSERT(npc->npc_proto == con->c_proto);
 
 	/* Check if connection is active and not expired. */
 	u_int flags = con->c_flags;
 	bool ok = (flags & (CONN_ACTIVE | CONN_EXPIRE)) == CONN_ACTIVE;
 	if (unlikely(!ok)) {
-//		printf("%s conn is found, but it's not active\n", pref);
+		dprintf("%s conn is found, but it's not active\n", pref);
 		return NULL;
 	}
 
@@ -447,7 +449,7 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 	dprintf("c_ifid: c_ifid %d, packet_ifid: %d\n", cifid, ifid);
 
 	if (unlikely(cifid && cifid != ifid)) {
-//		printf("%s id mismatch\n", pref);
+		dprintf("%s id mismatch\n", pref);
 		return NULL;
 	}
 
@@ -455,13 +457,13 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 	dprintf("flags %d, di %d, forw %d, pforw %d\n", flags, di, *forw, pforw);
 
 	if (unlikely(*forw != pforw)) {
-//		printf("%s forw mismatch\n", pref);
+		dprintf("%s forw mismatch\n", pref);
 		return NULL;
 	}
 
 	/* Update the last activity time. */
 	conn_update_atime(npc, con);
-//	printf("%s found\n", pref);
+	dprintf("%s found\n", pref);
 	return con;
 }
 
@@ -472,30 +474,19 @@ npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t* con_key, uint64_t* out_h
 	npf_conndb_t* conndb = npf->conn_db;
 	u_int key_nwords;
 
-	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
+	if (likely(npc->npc_alen == sizeof(in_addr_t)))
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
-	}
-	else {
+	else
 		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
-	}
 
-	if (npf_conndb_size(conndb, key_nwords) == 0) {
+	if (npf_conndb_size(conndb, key_nwords) == 0)
 		return NULL;
-	}
-
-	npf_conn_t* con;
 
 	/* Construct a key and lookup for a connection in the store. */
-	if (unlikely(!npf_conn_conkey(npc, con_key, true))) {
+	if (unlikely(!npf_conn_conkey(npc, con_key, true)))
 		return NULL;
-	}
 
-	con = npf_conndb_lookup_only(conndb, con_key, key_nwords, out_hv);
-	if (con == NULL) {
-		return NULL;
-	}
-
-	return con;
+	return npf_conndb_lookup_only(conndb, con_key, key_nwords, out_hv);
 }
 
 /*
@@ -508,23 +499,20 @@ npf_conn_lookup_part2(npf_conn_t* con, const npf_cache_t* npc,
 		  const void* key, uint64_t hv, const int di, bool* forw)
 {
 	u_int key_nwords;
-	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
+	if (likely(npc->npc_alen == sizeof(in_addr_t)))
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
-	}
-	else {
+	else
 		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
-	}
 
 	*forw = npf_conndb_forw(con, key, key_nwords, hv);
 
-	KASSERT(npc->npc_proto == con->c_proto);
+	// KASSERT(npc->npc_proto == con->c_proto);
 
 	/* Check if connection is active and not expired. */
 	u_int flags = con->c_flags;
 	bool ok = (flags & (CONN_ACTIVE | CONN_EXPIRE)) == CONN_ACTIVE;
-	if (unlikely(!ok)) {
+	if (unlikely(!ok))
 		return NULL;
-	}
 
 	/*
 	 * Match the interface and the direction of the connection entry
@@ -534,16 +522,14 @@ npf_conn_lookup_part2(npf_conn_t* con, const npf_cache_t* npc,
 	uint16_t ifid = npc->ifid;
 	dprintf("c_ifid: c_ifid %d, packet_ifid: %d\n", cifid, ifid);
 
-	if (unlikely(cifid && cifid != ifid)) {
+	if (unlikely(cifid && cifid != ifid))
 		return NULL;
-	}
 
 	bool pforw = (flags & PFIL_ALL) == (u_int)di;
 	dprintf("flags %d, di %d, forw %d, pforw %d\n", flags, di, *forw, pforw);
 
-	if (unlikely(*forw != pforw)) {
+	if (unlikely(*forw != pforw))
 		return NULL;
-	}
 
 	/* Update the last activity time. */
 	conn_update_atime(npc, con);
@@ -607,9 +593,8 @@ npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
 	npf_conn_t *con;
 
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
-	if (unlikely(!npf_conn_trackable_p(npc))) {
+	if (unlikely(!npf_conn_trackable_p(npc)))
 		return NULL;
-	}
 
 	dprintf("npf_alg_conn()\n");
 	/* Query ALG which may lookup connection for us. */
@@ -625,9 +610,8 @@ npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
 
 	/* Main lookup of the connection. */
-	if ((con = npf_conn_lookup_part1(npc, con_key, out_hv)) == NULL) {
+	if ((con = npf_conn_lookup_part1(npc, con_key, out_hv)) == NULL)
 		return NULL;
-	}
 
 	return con;
 }
@@ -700,11 +684,11 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 		con_pool = npf->conn_ipv4_cache;
 	}
 	else {
-		con_type_flag = CONN_IPV6;
+		con_type_flag = 0; /* IPv6 */
 		con_pool = npf->conn_ipv6_cache;
 	}
 
-	/* Allocate and initialise the new connection. */
+	/* Allocate and initialise new connection. */
 	con = pool_cache_get(con_pool, PR_NOWAIT);
 	if (unlikely(!con)) {
 		npf_worker_signal(npf);
@@ -776,11 +760,13 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 			  (c_back_entry_particial_hash == con->c_forw_entry_particial_hash);
 	con->c_flags |= hash_collision_flag;
 
-//	char pref[256];
-//	sprintf(pref, "core %hhu: fw", npc->cpu_thread);
-//	npf_conn_conkey_print(fw, pref);
-//	sprintf(pref, "core %hhu: bk", npc->cpu_thread);
-//	npf_conn_conkey_print(bk, pref);
+#ifdef ALEXK_DEBUG
+	char pref[256];
+	sprintf(pref, "core %hhu: fw", npc->cpu_thread);
+	npf_conn_conkey_print(fw, pref);
+	sprintf(pref, "core %hhu: bk", npc->cpu_thread);
+	npf_conn_conkey_print(bk, pref);
+#endif /* ALEXK_DEBUG */
 
 	/*
 	 * Insert both keys (entries representing directions) of the
@@ -791,7 +777,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 
 	if (unlikely(!npf_conndb_insert(npf->conn_db, fw, key_nwords,
 			  fw_key_hash, con))) {
-//		printf("core %hhu: fw conndb insert failed\n", npc->cpu_thread);
+		dprintf("core %hhu: fw conndb insert failed\n", npc->cpu_thread);
 		error = EISCONN;
 		goto err;
 	}
@@ -802,7 +788,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords, fw_key_hash);
 		KASSERT(ret == con);
 		error = EISCONN;
-//		printf("core %hhu: bk conndb insert failed\n", npc->cpu_thread);
+		dprintf("core %hhu: bk conndb insert failed\n", npc->cpu_thread);
 		goto err;
 	}
 
@@ -892,26 +878,12 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 		fw = &con_ipv4->c_forw_entry.ck_key[0];
 		bk = &con_ipv4->c_back_entry.ck_key[0];
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
-
-		/* nat */
-		con_ipv4->nt_tport = tport;
-		con_ipv4->nt_oport = oport;
-		con_ipv4->nt_taddr = taddr->word32[0];
-		con_ipv4->nt_oaddr = oaddr->word32[0];
-		con_ipv4->nt_type = npf_nat_type(nt);
 	}
 	else {
 		npf_conn_ipv6_t * con_ipv6 = (npf_conn_ipv6_t*) con;
 		fw = &con_ipv6->c_forw_entry.ck_key[0];
 		bk = &con_ipv6->c_back_entry.ck_key[0];
 		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
-
-		/* nat */
-		con_ipv6->nt_tport = tport;
-		con_ipv6->nt_oport = oport;
-		memcpy(&con_ipv6->nt_taddr, taddr, sizeof(npf_addr_t));
-		memcpy(&con_ipv6->nt_oaddr, oaddr, sizeof(npf_addr_t));
-		con_ipv6->nt_type = npf_nat_type(nt);
 	}
 
 	/* Construct a "backwards" key. */
@@ -921,6 +893,7 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 
 	/* Acquire the lock and check for the races. */
 	npf_lock_enter(&con->c_lock);
+
 	if (unlikely(con->c_flags & CONN_EXPIRE)) {
 		/* The connection got expired. */
 		npf_lock_exit(&con->c_lock);
@@ -930,10 +903,27 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 
 	if (unlikely(con->c_nat != NULL)) {
 		/* Race with a duplicate packet. */
-		npf_lock_exit(&con->c_lock);
-
 		npf_stats_inc(npf, npc, NPF_STAT_RACE_NAT);
+		npf_lock_exit(&con->c_lock);
 		return EISCONN;
+	}
+
+	/* nat */
+	if (likely(con->c_flags & CONN_IPV4)) {
+		npf_conn_ipv4_t * con_ipv4 = (npf_conn_ipv4_t*) con;
+		con_ipv4->nt_tport = tport;
+		con_ipv4->nt_oport = oport;
+		con_ipv4->nt_taddr = taddr->word32[0];
+		con_ipv4->nt_oaddr = oaddr->word32[0];
+		con_ipv4->nt_type = npf_nat_type(nt);
+	}
+	else {
+		npf_conn_ipv6_t * con_ipv6 = (npf_conn_ipv6_t*) con;
+		con_ipv6->nt_tport = tport;
+		con_ipv6->nt_oport = oport;
+		memcpy(&con_ipv6->nt_taddr, taddr, sizeof(npf_addr_t));
+		memcpy(&con_ipv6->nt_oaddr, oaddr, sizeof(npf_addr_t));
+		con_ipv6->nt_type = npf_nat_type(nt);
 	}
 
 	/* Remove the "backwards" entry. */
@@ -973,16 +963,14 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 		KASSERT(ret == con);
 
 		atomic_or_uint(&con->c_flags, CONN_REMOVED | CONN_EXPIRE);
-		npf_lock_exit(&con->c_lock);
-
 		npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_RACE_NAT);
+		npf_lock_exit(&con->c_lock);
 		return EISCONN;
 	}
 
 	/* Associate the NAT entry and release the lock. */
 	con->c_nat = nt;
 	npf_lock_exit(&con->c_lock);
-
 	return 0;
 }
 
@@ -1179,6 +1167,143 @@ npf_conn_gc(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd, bool flush,
 }
 
 /*
+ * npf_conn_gc: garbage collect the expired connections.
+ *
+ * => Must run in a single-threaded manner.
+ * => If it is a flush request, then destroy all connections.
+ * => If 'sync' is true, then perform passive serialisation.
+ */
+void
+npf_conn_gc_async(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd, bool flush,
+		  bool sync)
+{
+	npf_conn_t *con, *prev, *gclist;
+	struct timespec tsnow;
+	uint64_t hv;
+	u_int key_nwords;
+	uint32_t *bk, *fw;
+
+	getnanouptime(&tsnow);
+
+again:
+	if (cd->gc_state == NPF_GC_STATE_START) {
+		cd->gc_prev = NULL;
+		cd->gc_list = NULL;
+		cd->gc_con = npf_conndb_getlist(cd);
+		cd->gc_state = NPF_GC_STATE_ITERATE;
+		goto again;
+	}
+	else if (cd->gc_state == NPF_GC_STATE_ITERATE) {
+		/* load the state */
+		prev = cd->gc_prev;
+		con = cd->gc_con;
+		gclist = cd->gc_list;
+		uint32_t cnt = 0;
+
+		/*
+		 * Scan all connections and check them for expiration.
+		 */
+		while (con && cnt <= NPF_GC_GC_MAX_ITER) {
+			cnt++;
+			npf_conn_t *next = con->c_next;
+
+			/* Expired?  Flushing all? */
+			if (!npf_conn_expired(con, tsnow.tv_sec) && !flush) {
+				prev = con;
+				con = next;
+				continue;
+			}
+
+			if (likely(con->c_flags & CONN_IPV4)) {
+				npf_conn_ipv4_t * con_ipv4 = (npf_conn_ipv4_t*) con;
+				fw = &con_ipv4->c_forw_entry.ck_key[0];
+				bk = &con_ipv4->c_back_entry.ck_key[0];
+				key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
+			}
+			else {
+				npf_conn_ipv6_t * con_ipv6 = (npf_conn_ipv6_t*) con;
+				fw = &con_ipv6->c_forw_entry.ck_key[0];
+				bk = &con_ipv6->c_back_entry.ck_key[0];
+				key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
+			}
+
+			/* Remove both entries of the connection. */
+			npf_lock_enter(&con->c_lock);
+
+			if ((con->c_flags & CONN_REMOVED) == 0) {
+				npf_conn_t *ret __diagused;
+
+				hv = npf_conndb_hash(cd, fw, key_nwords);
+				ret = npf_conndb_remove(cd, fw, key_nwords, hv);
+				KASSERT(ret == con);
+
+				hv = npf_conndb_hash(cd, bk, key_nwords);
+				ret = npf_conndb_remove(cd, bk, key_nwords, hv);
+				KASSERT(ret == con);
+			}
+
+			/* Flag the removal and expiration. */
+			atomic_or_uint(&con->c_flags, CONN_REMOVED | CONN_EXPIRE);
+
+			npf_lock_exit(&con->c_lock);
+
+			/* Move to the G/C list. */
+			npf_conndb_dequeue(cd, con, prev);
+			con->c_next = gclist;
+			gclist = con;
+
+			/* Next.. */
+			con = next;
+		}
+
+		/* save the state */
+		if (!con) {
+			/* no more connections to iterate,
+			 * next time state iteration loop from the beginning
+			 */
+			cd->gc_state = NPF_GC_STATE_START;
+
+			/* GC */
+			npf_conndb_settail(cd, prev);
+			/*
+			 * Ensure it is safe to destroy the connections.
+			 * Note: drop the conn_lock (see the lock order).
+			 */
+			if (sync) {
+				npf_lock_exit(&npf->conn_lock);
+				if (gclist) {
+					npf_config_enter(npf);
+					npf_config_sync(npf);
+					npf_config_exit(npf);
+				}
+			}
+
+			/*
+			 * Garbage collect all expired connections.
+			 * May need to wait for the references to drain.
+			 */
+			pserialize_perform(npf->qsbr);
+
+			con = gclist;
+			while (con) {
+				npf_conn_t *next = con->c_next;
+				npf_conn_destroy(npc, npf, con);
+				con = next;
+			}
+		}
+		else {
+			if (sync)
+				npf_lock_exit(&npf->conn_lock);
+
+			/* save the state */
+			cd->gc_con = con;
+			cd->gc_prev = prev;
+			cd->gc_list = gclist;
+		}
+	}
+}
+
+/*
  * npf_conn_worker: G/C to run from a worker thread.
  */
 void
@@ -1186,7 +1311,7 @@ npf_conn_worker(npf_t *npf, npf_cache_t* npc)
 {
 	npf_lock_enter(&npf->conn_lock);
 	/* Note: the conn_lock will be released (sync == true). */
-	npf_conn_gc(npc, npf, npf->conn_db, false, true);
+	npf_conn_gc_async(npc, npf, npf->conn_db, false, true);
 }
 
 /*

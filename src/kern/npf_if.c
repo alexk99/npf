@@ -165,7 +165,6 @@ u_int
 npf_ifmap_getid(npf_t *npf, const ifnet_t *ifp)
 {
 	const u_int i = (uintptr_t)npf->ifops->getmeta(ifp);
-	KASSERT(i <= npf->ifmap_cnt);
 	return i;
 }
 
@@ -175,7 +174,7 @@ npf_ifmap_getname(npf_t *npf, const u_int id)
 	const char *ifname;
 
 	KASSERT(npf_config_locked_p(npf));
-	KASSERT(id > 0 && id <= npf->ifmap_cnt);
+	// KASSERT(id > 0 && id <= npf->ifmap_cnt);
 
 	ifname = npf->ifmap[id - 1].n_ifname;
 	KASSERT(ifname[0] != '\0');

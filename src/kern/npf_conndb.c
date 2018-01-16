@@ -54,15 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: npf_conndb.c,v 1.2 2014/07/23 01:25:34 rmind Exp $")
 #include "npf_city_hasher.h"
 #include "likely.h"
 
-struct npf_conndb {
-	void* conn_map_ipv4;
-	void* conn_map_ipv6;
-	npf_conn_t *		cd_recent;
-	npf_conn_t *		cd_list;
-	npf_conn_t *		cd_tail;
-	uint32_t		cd_seed;
-};
-
 #ifdef NPF_DEBUG_COUNTERS
 extern uint64_t g_debug_counter;
 #endif /* NPF_DEBUG_COUNTERS */
@@ -107,6 +98,8 @@ npf_conndb_create(void)
 	cd->cd_seed = cprng_fast32();
 	cd->conn_map_ipv4 = npf_conn_map_init();
 	cd->conn_map_ipv6 = npf_conn_map_ipv6_init();
+	cd->gc_state = NPF_GC_STATE_START;
+	cd->cd_tail_valid = true;
 
 	return cd;
 }
@@ -197,16 +190,13 @@ npf_conndb_lookup_only(npf_conndb_t *cd, const void *key, const u_int key_nwords
 	npf_conn_t* con;
 	const uint64_t hv = npf_conndb_hash(cd, key, key_nwords);
 
-	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
+	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS))
 		con = (npf_conn_t*) npf_conn_map_lookup(cd->conn_map_ipv4, key, hv);
-	}
-	else {
+	else
 		con = (npf_conn_t*) npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key, hv);
-	}
 
-	if (con == NULL) {
+	if (con == NULL)
 		return NULL;
-	}
 
 	*out_hv = hv;
 	return con;
@@ -313,6 +303,22 @@ npf_conndb_getlist(npf_conndb_t *cd)
 {
 	npf_conn_t *con, *prev;
 
+	/*
+	 * since gc might be in progress,
+	 * tail might be invalid.
+	 *
+	 * find out new tail, if it's not valid
+	 */
+	if (!cd->cd_tail_valid) {
+		con = cd->gc_list;
+		prev = NULL;
+		while (con) {
+			prev = con;
+			con = con->c_next;
+		}
+		npf_conndb_settail(cd, prev);
+	}
+
 	con = atomic_swap_ptr(&cd->cd_recent, NULL);
 	if ((prev = cd->cd_tail) == NULL) {
 		KASSERT(cd->cd_list == NULL);
@@ -321,6 +327,12 @@ npf_conndb_getlist(npf_conndb_t *cd)
 		KASSERT(prev->c_next == NULL);
 		prev->c_next = con;
 	}
+
+	/* tail is not valid anymore,
+	 * iterate till the end to find new tail
+	 */
+	cd->cd_tail_valid = false;
+
 	return cd->cd_list;
 }
 
@@ -333,18 +345,22 @@ npf_conndb_settail(npf_conndb_t *cd, npf_conn_t *con)
 	KASSERT(con || cd->cd_list == NULL);
 	KASSERT(!con || con->c_next == NULL);
 	cd->cd_tail = con;
+	cd->cd_tail_valid = true;
 }
 
 /*
  *
  */
+
+#define CONNDB_NON_TCP_STATE 12
+#define CONNDB_STATE_CNT (NPF_TCP_NSTATES + 1)
+
 void
 npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
 		  void* context)
 {
-	/* +1 for NPF_TCPS_OK */
-	uint32_t tcp_state_cnts[NPF_TCP_NSTATES];
-	memset(&tcp_state_cnts[0], 0, sizeof(uint32_t) * NPF_TCP_NSTATES);
+	uint32_t tcp_state_cnts[CONNDB_STATE_CNT];
+	memset(&tcp_state_cnts[0], 0, sizeof(uint32_t) * CONNDB_STATE_CNT);
 
 	npf_conn_t* conn = cd->cd_list;
 	uint32_t state;
@@ -358,6 +374,10 @@ npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
 				assert(state < NPF_TCP_NSTATES);
 				tcp_state_cnts[state]++;
 				break;
+
+			default:
+				tcp_state_cnts[CONNDB_NON_TCP_STATE]++;
+				break;
 		}
 
 		conn = conn->c_next;
@@ -366,7 +386,7 @@ npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
 	/* output tcp_state_cnt table using the callback function */
 	int i;
 	char msg[128];
-	static const char* tcp_state_names[NPF_TCP_NSTATES] = {
+	static const char* tcp_state_names[CONNDB_STATE_CNT] = {
 		"closed\t",			/*	0 */
 		"syn_sent",			/* 1 */
 		"sim_syn_sent",	/* 2 */
@@ -379,6 +399,7 @@ npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
 		"closing",			/* 9 */
 		"last_ack",			/* 10 */
 		"time_wait",		/* 11 */
+		"non_tcp",			/* 12 */
 	};
 
 	sprintf(msg, "state\t\t\tcnt");
@@ -386,7 +407,7 @@ npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
 	sprintf(msg, "-------------------------");
 	print_line_cb(msg, context);
 
-	for (i=0; i<NPF_TCP_NSTATES; i++) {
+	for (i=0; i<CONNDB_STATE_CNT; i++) {
 		sprintf(msg, "%s:\t\t%u", tcp_state_names[i], tcp_state_cnts[i]);
 		print_line_cb(msg, context);
 	}

@@ -59,6 +59,7 @@ __KERNEL_RCSID(0, "$NetBSD: npf_handler.c,v 1.33 2014/07/23 01:25:34 rmind Exp $
 #include "npf_conn.h"
 #include "likely.h"
 #include "npf_connkey.h"
+#include "stand/npf_stand.h"
 
 static bool		pfil_registered = false;
 static pfil_head_t *	npf_ph_if = NULL;
@@ -158,12 +159,12 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	uint8_t next_step_v[PKT_VEC_SIZE];
 	uint8_t step = 1;
 	int i;
+	npf_conn_t** con;
 
 	uint64_t destroyed_packets_bitfld = 0;
 
 	/* QSBR checkpoint. */
 	pserialize_checkpoint(npf->qsbr);
-	KASSERT(ifp != NULL);
 
 	dprintf("npf_packet_handler\n");
 
@@ -249,13 +250,13 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		uint64_t hashval_v[PKT_VEC_SIZE];
 
 		uint64_t* hv_ptr = hashval_v;
-		npf_conn_t** con_ptr = con_v;
 		uint32_t* conn_key_ptr = conn_key_buf;
 		bool conn_found = false;
 		int error;
 
+		con = con_v;
 		npc = npc_v;
-		for (i=0; i<vec_size; i++,npc++,hv_ptr++,con_ptr++,
+		for (i=0; i<vec_size; i++,npc++,hv_ptr++,con++,
 				  conn_key_ptr+=NPF_CONN_IPV6_KEYLEN_WORDS) {
 			/* skip freed packets or handle goto */
 			if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) ||
@@ -266,15 +267,15 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 
 			/* find and prefetch, don't inspect */
 			error = 0;
-			*con_ptr = npf_conn_inspect_part1(npc, conn_key_ptr, di, &error,
+			*con = npf_conn_inspect_part1(npc, conn_key_ptr, di, &error,
 					  hv_ptr);
 			if (unlikely(error)) {
 				error_v[i] = error;
 				errors = true;
 			}
 			else {
-				if (*con_ptr != NULL) {
-					prefetch0(*con_ptr);
+				if (*con != NULL) {
+					prefetch0(*con);
 					prefetch0(npc);
 					conn_found = true;
 				}
@@ -289,10 +290,10 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		if (conn_found) {
 			npc = npc_v;
 			hv_ptr = hashval_v;
-			con_ptr = con_v;
+			con = con_v;
 			conn_key_ptr = conn_key_buf;
 
-			for (i=0; i<vec_size; i++,npc++,hv_ptr++,con_ptr++,
+			for (i=0; i<vec_size; i++,npc++,hv_ptr++,con++,
 					  conn_key_ptr+=NPF_CONN_IPV6_KEYLEN_WORDS) {
 				/* skip freed packets or handle goto */
 				if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) ||
@@ -302,10 +303,9 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 				dprintf(" -- step %d .1 -- \n", step);
 
 				/* Inspect the list of connections (if found, acquires a reference). */
-				if (*con_ptr != NULL) {
-					*con_ptr = npf_conn_inspect_part2(*con_ptr, npc, conn_key_ptr,
+				if (*con != NULL)
+					*con = npf_conn_inspect_part2(*con, npc, conn_key_ptr,
 							  *hv_ptr, di);
-				}
 			}
 		}
 	}
@@ -315,8 +315,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	/*
 	 * step 3
 	 */
-	npc = &npc_v[0];
-	npf_conn_t** con = &con_v[0];
+	npc = npc_v;
+	con = con_v;
 	for (i=0; i<vec_size; i++,npc++,con++) {
 		/* skip destroyed packets or handle goto */
 		if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) || next_step_v[i] > step)
@@ -395,8 +395,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	/*
 	 * step 4
 	 */
-	npc = &npc_v[0];
-	con = &con_v[0];
+	npc = npc_v;
+	con = con_v;
 	for (i=0; i<vec_size; i++,npc++,con++) {
 		/* skip destroyed packets or handle goto */
 		if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) || next_step_v[i] > step)
@@ -432,8 +432,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 * step 5
 	 * pass label
 	 */
-	npc = &npc_v[0];
-	con = &con_v[0];
+	npc = npc_v;
+	con = con_v;
 	for (i=0; i<vec_size; i++,npc++,con++) {
 		/* skip destroyed packets or handle goto */
 		if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) || next_step_v[i] > step)
@@ -457,8 +457,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 * step 6
 	 * block label
 	 */
-	npc = &npc_v[0];
-	con = &con_v[0];
+	npc = npc_v;
+	con = con_v;
 	for (i=0; i<vec_size; i++,npc++,con++) {
 		/* skip destroyed packets or handle goto */
 		if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) || next_step_v[i] > step)
@@ -471,9 +471,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		 * It may reverse the decision from pass to block.
 		 */
 		if (rp_v[i] && !npf_rproc_run(npc, rp_v[i], &decision_v[i])) {
-			if (*con) {
+			if (*con)
 				npf_conn_release(*con);
-			}
 			npf_rproc_release(rp_v[i]);
 
 			MARK_PKT_DESTROYED(destroyed_packets_bitfld, i);
@@ -488,9 +487,9 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 * step 7
 	 * out label
 	 */
-	npc = &npc_v[0];
-	nbuf = &nbuf_v[0];
-	con = &con_v[0];
+	npc = npc_v;
+	nbuf = nbuf_v;
+	con = con_v;
 	for (i=0; i<vec_size; i++,npc++,con++,nbuf++) {
 		/* skip destroyed packets or handle goto */
 		if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) || next_step_v[i] > step)

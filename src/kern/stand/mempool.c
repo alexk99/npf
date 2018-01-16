@@ -152,7 +152,7 @@ mempool_free(mempool_t *mp, void *obj)
 	unsigned nitems;
 
 	tp = mempool_get_local(mp);
-#ifdef DEBUG
+#ifdef MEMPOOL_DEBUG
 	/* Diagnostics: check for the double-free and fill the magic. */
 	if (tp) for (unsigned i = 0; i < tp->nitems; i++) {
 		ASSERT(tp->objptr[i] != obj);

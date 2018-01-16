@@ -301,7 +301,6 @@ npf_nat_freepolicy(npf_natpolicy_t *np)
 		kpause("npfgcnat", false, 1, NULL);
 	}
 	KASSERT(LIST_EMPTY(&np->n_nat_list));
-	KASSERT(pm == NULL || pm->p_refcnt > 0);
 
 	npf_lock_destroy(&np->n_lock);
 	kmem_free(np, sizeof (npf_natpolicy_t));
@@ -655,8 +654,6 @@ npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 	}
 
 	const u_int which = npf_nat_which(nt_type, forw);
-
-	KASSERT((np->n_flags & NPF_NAT_PORTS) != 0 || port == 0);
 
 	/* Execute ALG translation first. */
 	if (unlikely((npc->npc_info & NPC_ALG_EXEC) == 0)) {

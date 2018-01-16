@@ -52,15 +52,32 @@ typedef struct npf_connkey_ipv6 npf_connkey_ipv6_t;
 #define	CONN_EXPIRE	0x010	/* explicitly expire */
 #define	CONN_REMOVED 0x020	/* "forw/back" entries removed */
 #define	CONN_IPV4	0x040	/* ipv4 connection */
-#define	CONN_IPV6	0x080	/* ipv6 connection */
 
 /* particial hash values of backward and forward keys are equal */
 #define	CONN_PARTICIAL_HASH_COLLISION	0x100
 
 /*
+ * Connection database
+ */
+struct npf_conndb {
+	void* conn_map_ipv4;
+	void* conn_map_ipv6;
+	npf_conn_t *		cd_recent;
+	npf_conn_t *		cd_list;
+	npf_conn_t *		cd_tail;
+	uint32_t		cd_seed;
+
+	/* asyn gc states */
+	npf_conn_t *		gc_con;
+	npf_conn_t *		gc_prev;
+	npf_conn_t *		gc_list;
+	uint8_t				gc_state;
+	uint8_t				cd_tail_valid;
+};
+
+/*
  * The main connection tracking structure.
  */
-
 struct npf_conn {
 	npf_lock_t		c_lock;
 
@@ -146,6 +163,12 @@ typedef struct npf_connkey_ipv6 npf_connkey_ipv6_t;
 
 typedef int (*npf_print_cb_t) (const char* msg, void* context);
 
+/* connection gc states */
+#define NPF_GC_STATE_START		1
+#define NPF_GC_STATE_ITERATE	2
+
+#define NPF_GC_GC_MAX_ITER		1000
+
 /*
  * Connection tracking interface.
  */
@@ -191,6 +214,7 @@ int		npf_conn_setnat(const npf_cache_t *, npf_conn_t *,
 		    npf_nat_t *, u_int);
 npf_nat_t *	npf_conn_getnat(npf_conn_t *, const int, bool *);
 void		npf_conn_gc(npf_cache_t *, npf_t *, npf_conndb_t *, bool, bool);
+void		npf_conn_gc_async(npf_cache_t *, npf_t *, npf_conndb_t *, bool, bool);
 void		npf_conn_worker(npf_t *, npf_cache_t *);
 int		npf_conn_import(npf_cache_t *, npf_t *, npf_conndb_t *,
 		  prop_dictionary_t, npf_ruleset_t *);

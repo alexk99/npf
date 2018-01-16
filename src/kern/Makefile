@@ -19,6 +19,7 @@ CFLAGS+=	-Wno-unused
 #CFLAGS+=       -DNPF_DEBUG_COUNTERS
 #CFLAGS+=       -DNPF_SPINLOCK
 #CFLAGS+=       -DNPF_DEBUG_DONT_TRACK_TCP_WINDOW
+CFLAGS+=       -DMEMPOOL_DEBUG
 
 SYSNAME:=	$(shell uname -s)
 
@@ -31,14 +32,13 @@ CFLAGS+=	-O1 -DDEBUG -fno-omit-frame-pointer
 CFLAGS+=	-D_NPF_TESTING
 else
 CFLAGS+=	-fvisibility=hidden
-CFLAGS+=	-DNDEBUG
+#CFLAGS+=	-DNDEBUG
 LDFLAGS=	-flto
-
 # debug
 #CFLAGS+=	-fno-omit-frame-pointer
-#CFLAGS+=	-g
-
+CFLAGS+=	-g
 endif
+
 LDFLAGS+=	-lpthread -lpcap -lqsbr -lcdb -lprop -lbpfjit
 ifeq ($(SYSNAME),Linux)
 LDFLAGS+=	-ljemalloc #-lJudy

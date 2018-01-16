@@ -457,7 +457,6 @@ again:
 	 * fragmented, then we cannot look into L4.
 	 */
 	flags = npf_cache_ip(npc, nbuf);
-	//return 0; // return 2.1
 	if ((flags & NPC_IP46) == 0 || (flags & NPC_IPFRAG) != 0) {
 		nbuf_unset_flag(nbuf, NBUF_DATAREF_RESET);
 		npc->npc_info |= flags;
@@ -492,7 +491,7 @@ again:
 	case IPPROTO_ICMP:
 		/* Cache: layer 4 - ICMPv4. */
 		dprintf("npc cache icmp\n");
-		
+
 		npc->npc_l4.icmp = nbuf_advance(nbuf, hlen,
 		    offsetof(struct icmp, icmp_void));
 		l4flags = NPC_LAYER4 | NPC_ICMP;
