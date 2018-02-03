@@ -430,7 +430,7 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 		dprintf("%s key not found\n", pref);
 		return NULL;
 	}
-	// KASSERT(npc->npc_proto == con->c_proto);
+	KASSERT(npc->npc_proto == con->c_proto);
 
 	/* Check if connection is active and not expired. */
 	u_int flags = con->c_flags;
@@ -506,7 +506,7 @@ npf_conn_lookup_part2(npf_conn_t* con, const npf_cache_t* npc,
 
 	*forw = npf_conndb_forw(con, key, key_nwords, hv);
 
-	// KASSERT(npc->npc_proto == con->c_proto);
+	KASSERT(npc->npc_proto == con->c_proto);
 
 	/* Check if connection is active and not expired. */
 	u_int flags = con->c_flags;
@@ -582,38 +582,55 @@ npf_conn_inspect(npf_cache_t *npc, const int di, int *error)
 	}
 	return con;
 }
+
 /*
+ * Returns:
+ * >= 0 ok:
+ *		NPF_CONN_INSPECT_OK, 0 - ok, connection and its hash
+ *			stored in out parameters
  *
+ *		NPF_CONN_INSPECT_BY_ALG, 1 - ok, connection is found and already
+ *			inspected by one of ALGS, out_conn_hash is undefined
+ *
+ *		NPF_CONN_INSPECT_NOT_FOUND, 2 - connection not found
+ *			out parameters are undefined
+ *
+ * < 0 - error
  */
-npf_conn_t *
+int
 npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
-		  int* error, uint64_t* out_hv)
+		  npf_conn_t** out_con, uint64_t* out_conn_hash)
 {
 	nbuf_t *nbuf = npc->npc_nbuf;
 	npf_conn_t *con;
 
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
 	if (unlikely(!npf_conn_trackable_p(npc)))
-		return NULL;
+		return NPF_CONN_INSPECT_NOT_FOUND;
 
 	dprintf("npf_alg_conn()\n");
 	/* Query ALG which may lookup connection for us. */
 	if ((con = npf_alg_conn(npc, di)) != NULL) {
 		/* Note: reference is held. */
 		dprintf("npf_alg_conn() found a connection\n");
-		return con;
+		*out_con = con;
+		return NPF_CONN_INSPECT_BY_ALG;
 	}
-	if (unlikely(nbuf_head_mbuf(nbuf) == NULL)) {
-		*error = ENOMEM;
-		return NULL;
-	}
+
+	if (unlikely(nbuf_head_mbuf(nbuf) == NULL))
+		return -ENOMEM;
+
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
 
 	/* Main lookup of the connection. */
-	if ((con = npf_conn_lookup_part1(npc, con_key, out_hv)) == NULL)
-		return NULL;
-
-	return con;
+	con = npf_conn_lookup_part1(npc, con_key, out_conn_hash);
+	if (con == NULL) {
+		return NPF_CONN_INSPECT_NOT_FOUND;
+	}
+	else {
+		*out_con = con;
+		return NPF_CONN_INSPECT_OK;
+	}
 }
 
 /*
@@ -1166,6 +1183,13 @@ npf_conn_gc(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd, bool flush,
 	}
 }
 
+__dso_public void
+npf_conn_dbg(void) {
+	printf("c_state offs: %lu\n", offsetof(struct npf_conn, c_state));
+	printf("c_proto offs: %lu\n", offsetof(struct npf_conn, c_proto));
+	printf("c_next offs: %lu\n", offsetof(struct npf_conn, c_next));
+}
+
 /*
  * npf_conn_gc: garbage collect the expired connections.
  *
@@ -1203,7 +1227,7 @@ again:
 		/*
 		 * Scan all connections and check them for expiration.
 		 */
-		while (con && cnt <= NPF_GC_GC_MAX_ITER) {
+		while (con != NULL && cnt <= NPF_GC_MAX_ITER) {
 			cnt++;
 			npf_conn_t *next = con->c_next;
 
@@ -1257,7 +1281,7 @@ again:
 		}
 
 		/* save the state */
-		if (!con) {
+		if (con == NULL) {
 			/* no more connections to iterate,
 			 * next time state iteration loop from the beginning
 			 */

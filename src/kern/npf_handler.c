@@ -247,16 +247,20 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 */
 	{
 		uint32_t conn_key_buf[NPF_CONN_IPV6_KEYLEN_WORDS * PKT_VEC_SIZE];
-		uint64_t hashval_v[PKT_VEC_SIZE];
+		uint64_t conn_hash_v[PKT_VEC_SIZE];
 
-		uint64_t* hv_ptr = hashval_v;
+		uint64_t* conn_hash = conn_hash_v;
 		uint32_t* conn_key_ptr = conn_key_buf;
 		bool conn_found = false;
-		int error;
+		int ret;
+		uint32_t already_inspected_connections = 0;
+
+		/* num bits in already_inspected_connections == PKT_VEC_SIZE */
+		KASSERT((sizeof(already_inspected_connections) << 3) == PKT_VEC_SIZE);
 
 		con = con_v;
 		npc = npc_v;
-		for (i=0; i<vec_size; i++,npc++,hv_ptr++,con++,
+		for (i=0; i<vec_size; i++,npc++,conn_hash++,con++,
 				  conn_key_ptr+=NPF_CONN_IPV6_KEYLEN_WORDS) {
 			/* skip freed packets or handle goto */
 			if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) ||
@@ -266,18 +270,26 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 			dprintf(" -- step %d .0 -- \n", step);
 
 			/* find and prefetch, don't inspect */
-			error = 0;
-			*con = npf_conn_inspect_part1(npc, conn_key_ptr, di, &error,
-					  hv_ptr);
-			if (unlikely(error)) {
-				error_v[i] = error;
+			ret = npf_conn_inspect_part1(npc, conn_key_ptr, di, con, conn_hash);
+			if (unlikely(ret < 0)) {
+				error_v[i] = -ret;
 				errors = true;
+				*con = NULL;
 			}
 			else {
-				if (*con != NULL) {
+				if (ret == NPF_CONN_INSPECT_OK) {
 					prefetch0(*con);
 					prefetch0(npc);
 					conn_found = true;
+				}
+				else if (ret == NPF_CONN_INSPECT_BY_ALG) {
+					/* connection is found and inspected by ALG,
+					 * no need for npf_conn_inspect_part2()
+					 */
+					already_inspected_connections |= 1 << i;
+				}
+				else {
+					*con = NULL;
 				}
 			}
 		}
@@ -289,14 +301,17 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		 */
 		if (conn_found) {
 			npc = npc_v;
-			hv_ptr = hashval_v;
+			conn_hash = conn_hash_v;
 			con = con_v;
 			conn_key_ptr = conn_key_buf;
 
-			for (i=0; i<vec_size; i++,npc++,hv_ptr++,con++,
+			for (i=0; i<vec_size; i++,npc++,conn_hash++,con++,
 					  conn_key_ptr+=NPF_CONN_IPV6_KEYLEN_WORDS) {
-				/* skip freed packets or handle goto */
-				if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) ||
+				/* skip already inspected connections,
+				 * skip freed packets or handle goto
+				 */
+				if ((already_inspected_connections & (1 << i)) ||
+						  IS_PKT_DESROYED(destroyed_packets_bitfld, i) ||
 						  next_step_v[i] > step)
 					continue;
 
@@ -305,7 +320,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 				/* Inspect the list of connections (if found, acquires a reference). */
 				if (*con != NULL)
 					*con = npf_conn_inspect_part2(*con, npc, conn_key_ptr,
-							  *hv_ptr, di);
+							  *conn_hash, di);
 			}
 		}
 	}

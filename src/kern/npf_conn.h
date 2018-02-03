@@ -167,7 +167,13 @@ typedef int (*npf_print_cb_t) (const char* msg, void* context);
 #define NPF_GC_STATE_START		1
 #define NPF_GC_STATE_ITERATE	2
 
-#define NPF_GC_GC_MAX_ITER		1000
+/* max number of connection GC can check at once */
+#define NPF_GC_MAX_ITER		50000
+
+/* */
+#define NPF_CONN_INSPECT_OK	0
+#define NPF_CONN_INSPECT_BY_ALG	1
+#define NPF_CONN_INSPECT_NOT_FOUND 2
 
 /*
  * Connection tracking interface.
@@ -197,9 +203,9 @@ npf_conn_lookup_part2(npf_conn_t* con, const npf_cache_t* npc,
 npf_conn_t *
 npf_conn_inspect(npf_cache_t *npc, const int di, int *error);
 
-npf_conn_t *
+int
 npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
-		  int* error, uint64_t* out_hv);
+		  npf_conn_t** out_con, uint64_t* out_conn_hash);
 
 npf_conn_t *
 npf_conn_inspect_part2(npf_conn_t* con, npf_cache_t *npc, const void* key,
@@ -214,6 +220,7 @@ int		npf_conn_setnat(const npf_cache_t *, npf_conn_t *,
 		    npf_nat_t *, u_int);
 npf_nat_t *	npf_conn_getnat(npf_conn_t *, const int, bool *);
 void		npf_conn_gc(npf_cache_t *, npf_t *, npf_conndb_t *, bool, bool);
+void		npf_conn_dbg(void);
 void		npf_conn_gc_async(npf_cache_t *, npf_t *, npf_conndb_t *, bool, bool);
 void		npf_conn_worker(npf_t *, npf_cache_t *);
 int		npf_conn_import(npf_cache_t *, npf_t *, npf_conndb_t *,

@@ -97,6 +97,7 @@ npf_state_init(npf_cache_t *npc, npf_state_t *nst)
 {
 	const int proto = npc->npc_proto;
 	bool ret;
+	u_int old_state;
 
 	KASSERT(npf_iscached(npc, NPC_IP46));
 	KASSERT(npf_iscached(npc, NPC_LAYER4));
@@ -111,7 +112,14 @@ npf_state_init(npf_cache_t *npc, npf_state_t *nst)
 	case IPPROTO_UDP:
 	case IPPROTO_ICMP:
 		/* Generic. */
-		nst->nst_state = npf_generic_fsm[nst->nst_state][NPF_FLOW_FORW];
+		old_state = nst->nst_state;
+		nst->nst_state = npf_generic_fsm[old_state][NPF_FLOW_FORW];
+#ifdef CONN_STATE_DEBUG_CHECK
+		if (!(nst->nst_state < NPF_ANY_CONN_NSTATES))
+			printf("incorrect generic nstate %u, old state %u\n", nst->nst_state,
+					  old_state);
+		KASSERT(nst->nst_state < NPF_ANY_CONN_NSTATES);
+#endif
 		ret = true;
 		break;
 	default:
@@ -139,6 +147,7 @@ npf_state_inspect(npf_cache_t *npc, npf_state_t *nst, const bool forw)
 	const int proto = npc->npc_proto;
 	const int di = forw ? NPF_FLOW_FORW : NPF_FLOW_BACK;
 	bool ret;
+	u_int old_state;
 
 	switch (proto) {
 	case IPPROTO_TCP:
@@ -148,7 +157,14 @@ npf_state_inspect(npf_cache_t *npc, npf_state_t *nst, const bool forw)
 	case IPPROTO_UDP:
 	case IPPROTO_ICMP:
 		/* Generic. */
-		nst->nst_state = npf_generic_fsm[nst->nst_state][di];
+		old_state = nst->nst_state;
+		nst->nst_state = npf_generic_fsm[old_state][di];
+#ifdef CONN_STATE_DEBUG_CHECK
+		if (!(nst->nst_state < NPF_ANY_CONN_NSTATES))
+			printf("incorrect generic nstate %u, old state %u, di %d\n",
+					  nst->nst_state, old_state, di);
+		KASSERT(nst->nst_state < NPF_ANY_CONN_NSTATES);
+#endif
 		ret = true;
 		break;
 	default:

@@ -154,10 +154,10 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 
 	/* Load an empty configuration. */
 	npf_config_init(npf);
-	
+
 	/* init icmp alg */
 	npf_alg_icmp_modcmd(MODULE_CMD_INIT, npf);
-	
+
 	return npf;
 }
 

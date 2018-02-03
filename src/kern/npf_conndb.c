@@ -168,7 +168,7 @@ npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
 
 	/* determine forw */
 	if (unlikely(con->c_flags & CONN_PARTICIAL_HASH_COLLISION)) {
-		/* hash collision, we need to do a real comparing */
+		/* hash collision, we need to do full comparing */
 		*forw = (conndb_forw_cmp(con, key, key_nwords) == 0);
 	}
 	else {

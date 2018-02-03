@@ -172,9 +172,7 @@ const char *
 npf_ifmap_getname(npf_t *npf, const u_int id)
 {
 	const char *ifname;
-
 	KASSERT(npf_config_locked_p(npf));
-	// KASSERT(id > 0 && id <= npf->ifmap_cnt);
 
 	ifname = npf->ifmap[id - 1].n_ifname;
 	KASSERT(ifname[0] != '\0');

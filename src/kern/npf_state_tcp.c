@@ -466,10 +466,19 @@ npf_state_tcp(npf_cache_t *npc, npf_state_t *nst, int di)
 			dprintf("state fsm: state %u, di %d, flagcase: %u\n",
 					  state, di, flagcase);
 		}
-	} else if (state == NPF_TCPS_TIME_WAIT) {
+
+#ifdef CONN_STATE_DEBUG_CHECK
+		if (!(nstate < NPF_TCP_NSTATES || nstate == NPF_TCPS_OK))
+			printf("incorrect nstate %u, di %d, state %u, flagcase %u, tcpfl %u\n",
+					  nstate, di, state, flagcase, tcpfl);
+		KASSERT(nstate < NPF_TCP_NSTATES || nstate == NPF_TCPS_OK);
+#endif
+	}
+	else if (state == NPF_TCPS_TIME_WAIT) {
 		/* Prevent TIME-WAIT assassination (RFC 1337). */
 		nstate = NPF_TCPS_OK;
-	} else {
+	}
+	else {
 		dprintf("NPF_TCPS_CLOSED\n");
 		nstate = NPF_TCPS_CLOSED;
 	}
@@ -487,20 +496,20 @@ npf_state_tcp(npf_cache_t *npc, npf_state_t *nst, int di)
 #define	NPF_TCPS_LAST_ACK	10
 #define	NPF_TCPS_TIME_WAIT	11
 
-
 	/* Determine whether TCP packet really belongs to this connection. */
 	if (!npf_tcp_inwindow(npc, nst, di)) {
 		return npf_state_init(npc, nst);
-//		if (state == NPF_TCPS_CLOSED) {
-//			return npf_state_init(npc, nst);
-//		}
-//		else {
-//			return false;
-//		}
 	}
 	if (__predict_true(nstate == NPF_TCPS_OK)) {
 		return true;
 	}
+
+#ifdef CONN_STATE_DEBUG_CHECK
+	if (!(nstate < NPF_TCP_NSTATES))
+		printf("incorrect nstate %u, di %d, state %u, tcpfl %u\n", nstate, di,
+				  state, tcpfl);
+	KASSERT(nstate < NPF_TCP_NSTATES);
+#endif
 
 	nst->nst_state = nstate;
 	return true;

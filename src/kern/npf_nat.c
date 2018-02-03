@@ -513,10 +513,9 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 
 	/* Construct a new NAT entry and associate it with the connection. */
 	nt = pool_cache_get(nat_cache, PR_NOWAIT);
-	if (nt == NULL) {
+	if (nt == NULL)
 		return NULL;
-	}
-	npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_NAT_CREATE);
+
 	nt->nt_natpolicy = np;
 	nt->nt_conn = con;
 	nt->nt_alg = NULL;
@@ -525,7 +524,8 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 	if (np->n_type == NPF_NATOUT) {
 		/* Outbound NAT: source (think internal) address. */
 		memcpy(&nt->nt_oaddr, npc->npc_ips[NPF_SRC], npc->npc_alen);
-	} else {
+	}
+	else {
 		/* Inbound NAT: destination (think external) address. */
 		KASSERT(np->n_type == NPF_NATIN);
 		memcpy(&nt->nt_oaddr, npc->npc_ips[NPF_DST], npc->npc_alen);
@@ -573,7 +573,8 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 		const struct tcphdr *th = npc->npc_l4.tcp;
 		nt->nt_oport = (np->n_type == NPF_NATOUT) ?
 			th->th_sport : th->th_dport;
-	} else {
+	}
+	else {
 		const struct udphdr *uh = npc->npc_l4.udp;
 		nt->nt_oport = (np->n_type == NPF_NATOUT) ?
 			uh->uh_sport : uh->uh_dport;
@@ -587,14 +588,16 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 		/* get nat port */
 		nt->nt_tport = npf_nat_getport(nt);
 		if (unlikely(nt->nt_tport == 0)) {
-			// todo: handle 0 value indicating that no free ports available
+			pool_cache_put(nat_cache, nt);
 			return NULL;
 		}
 	}
 	else {
 		nt->nt_tport = np->n_tport;
 	}
+	
 out:
+	npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_NAT_CREATE);
 	npf_lock_enter(&np->n_lock);
 	LIST_INSERT_HEAD(&np->n_nat_list, nt, nt_entry);
 	npf_lock_exit(&np->n_lock);

@@ -33,6 +33,7 @@ CFLAGS+=	-D_NPF_TESTING
 else
 CFLAGS+=	-fvisibility=hidden
 #CFLAGS+=	-DNDEBUG
+CFLAGS+=	-DCONN_STATE_DEBUG_CHECK
 LDFLAGS=	-flto
 # debug
 #CFLAGS+=	-fno-omit-frame-pointer
