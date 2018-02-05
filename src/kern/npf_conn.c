@@ -1183,13 +1183,6 @@ npf_conn_gc(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd, bool flush,
 	}
 }
 
-__dso_public void
-npf_conn_dbg(void) {
-	printf("c_state offs: %lu\n", offsetof(struct npf_conn, c_state));
-	printf("c_proto offs: %lu\n", offsetof(struct npf_conn, c_proto));
-	printf("c_next offs: %lu\n", offsetof(struct npf_conn, c_next));
-}
-
 /*
  * npf_conn_gc: garbage collect the expired connections.
  *

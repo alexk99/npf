@@ -220,7 +220,6 @@ int		npf_conn_setnat(const npf_cache_t *, npf_conn_t *,
 		    npf_nat_t *, u_int);
 npf_nat_t *	npf_conn_getnat(npf_conn_t *, const int, bool *);
 void		npf_conn_gc(npf_cache_t *, npf_t *, npf_conndb_t *, bool, bool);
-void		npf_conn_dbg(void);
 void		npf_conn_gc_async(npf_cache_t *, npf_t *, npf_conndb_t *, bool, bool);
 void		npf_conn_worker(npf_t *, npf_cache_t *);
 int		npf_conn_import(npf_cache_t *, npf_t *, npf_conndb_t *,
