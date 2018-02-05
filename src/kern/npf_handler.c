@@ -283,8 +283,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 					conn_found = true;
 				}
 				else if (ret == NPF_CONN_INSPECT_BY_ALG) {
-					/* connection is found and inspected by ALG,
-					 * no need for npf_conn_inspect_part2()
+					/* connection is found and inspected by ALG (npf_alg_conn()),
+					 * no need to call npf_conn_inspect_part2()
 					 */
 					already_inspected_connections |= 1 << i;
 				}
