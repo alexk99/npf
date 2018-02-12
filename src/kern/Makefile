@@ -118,7 +118,6 @@ OBJS+=		stand/murmurhash.o stand/subr_hash.o
 OBJS+=		stand/mempool.o stand/tls_pth.o
 OBJS+=		npf_portmap.o
 OBJS+=		npf_conn_map.o npf_conn_map_ipv6.o npf_city_hasher.o
-
 #
 # Flags for the library target
 #
@@ -138,6 +137,8 @@ install:	IMANDIR=	$(DESTDIR)/$(MANDIR)/man3/
 
 CPP = g++
 
+PORTMAP_STRESS_OBJ=	npf_portmap.o npf_portmap_test.o npf_city_hasher.o
+PORTMAP_STRESS_OBJ+=	MersenneTwister.o
 #
 # Targets
 #
@@ -165,5 +166,14 @@ install: $(addprefix install/,$(LIB).la)
 clean:
 	libtool --mode=clean rm
 	rm -rf .libs *.o *.lo *.la stand/*.{l,}o stand/*.la
+
+%.o: %.c
+	libtool --mode=compile --tag CC $(CC) $(CFLAGS) -c $<
+
+%.o: %.cpp
+	libtool --mode=compile --tag CC $(CPP) $(CPPFLAGS) -c $<
+	
+portmap_stress: $(PORTMAP_STRESS_OBJ)
+	$(CPP) $(CPPFLAGS) $^ -o npf_portmap_test -lpthread -lcityhash
 
 .PHONY: all lib install clean
