@@ -588,6 +588,13 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 		/* get nat port */
 		nt->nt_tport = npf_nat_getport(nt);
 		if (unlikely(nt->nt_tport == 0)) {
+			/* no space in the portmap */
+			npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_NAT_PORTMAP_NO_SPACE);
+			/* return portmap */
+			int ret = npf_portmap_return(npc->npc_ctx->nat_portmap_hash,
+					  nt->nt_taddr.word32[0]);
+			assert(ret == 0);
+			/* free nat */
 			pool_cache_put(nat_cache, nt);
 			return NULL;
 		}
@@ -595,7 +602,7 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 	else {
 		nt->nt_tport = np->n_tport;
 	}
-	
+
 out:
 	npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_NAT_CREATE);
 	npf_lock_enter(&np->n_lock);
@@ -853,6 +860,16 @@ npf_nat_setalg(npf_nat_t *nt, npf_alg_t *alg, uintptr_t arg)
 {
 	nt->nt_alg = alg;
 	nt->nt_alg_arg = arg;
+}
+
+__dso_public void
+npf_nat_dbg(void) {
+	printf("n_portmap offs: %lu\n", offsetof(struct npf_nat, n_portmap));
+	printf("portmap size: %lu\n", PORTMAP_MEM_SIZE);
+	printf("nt_conn offs: %lu\n", offsetof(struct npf_nat, nt_conn));
+
+	printf("nt_taddr offs: %lu\n", offsetof(struct npf_nat, nt_taddr));
+	printf("nt_oaddr offs: %lu\n", offsetof(struct npf_nat, nt_oaddr));
 }
 
 /*

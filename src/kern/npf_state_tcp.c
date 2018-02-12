@@ -523,3 +523,21 @@ npf_state_tcp_timeout(const npf_state_t *nst)
 	KASSERT(state < NPF_TCP_NSTATES);
 	return npf_tcp_timeouts[state];
 }
+
+/*
+ * Set tcp timeout
+ */
+__dso_public void
+npf_tcp_timeout_set(uint16_t prm_index, u_int timeout)
+{
+	npf_tcp_timeouts[prm_index] = timeout;
+}
+
+/*
+ * Get generic timeout
+ */
+__dso_public u_int
+npf_tcp_timeout_get(uint16_t prm_index)
+{
+	return npf_tcp_timeouts[prm_index];
+}

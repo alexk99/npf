@@ -98,6 +98,11 @@ void npf_stats(npf_t *, uint64_t *);
 void npf_stats_clear(npf_t*);
 void npf_conndb_state_summary(npf_t*, npf_print_cb_t, void*);
 
+void		npf_generic_timeout_set(uint16_t prm_index, u_int timeout);
+u_int		npf_generic_timeout_get(uint16_t prm_index);
+void		npf_tcp_timeout_set(uint16_t prm_index, u_int timeout);
+u_int		npf_tcp_timeout_get(uint16_t prm_index);
+
 void npf_checkpoint(npf_t *);
 
 #endif

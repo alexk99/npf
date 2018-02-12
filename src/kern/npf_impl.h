@@ -122,26 +122,6 @@ typedef void (*npf_workfunc_t)(npf_t *, npf_cache_t *);
 #define	NPF_MAX_WORKS		4
 
 /*
- * NPF TCP states.  Note: these states are different from the TCP FSM
- * states of RFC 793.  The packet filter is a man-in-the-middle.
- */
-#define	NPF_TCPS_OK		255
-#define	NPF_TCPS_CLOSED		0
-#define	NPF_TCPS_SYN_SENT	1
-#define	NPF_TCPS_SIMSYN_SENT	2
-#define	NPF_TCPS_SYN_RECEIVED	3
-#define	NPF_TCPS_ESTABLISHED	4
-#define	NPF_TCPS_FIN_SENT	5
-#define	NPF_TCPS_FIN_RECEIVED	6
-#define	NPF_TCPS_CLOSE_WAIT	7
-#define	NPF_TCPS_FIN_WAIT	8
-#define	NPF_TCPS_CLOSING	9
-#define	NPF_TCPS_LAST_ACK	10
-#define	NPF_TCPS_TIME_WAIT	11
-
-#define	NPF_TCP_NSTATES		12
-
-/*
  * CONNECTION STATE STRUCTURES
  */
 
@@ -440,6 +420,7 @@ uint64_t	npf_nat_getid(const npf_natpolicy_t *);
 void		npf_nat_freealg(npf_natpolicy_t *, npf_alg_t *);
 
 int		npf_do_nat(npf_cache_t *, npf_conn_t *, const int);
+void		npf_nat_dbg(void);
 void		npf_nat_destroy(npf_cache_t *, npf_t *, npf_nat_t *);
 void		npf_nat_getorig(npf_nat_t *, npf_addr_t **, in_port_t *);
 void		npf_nat_gettrans(npf_nat_t *, npf_addr_t **, in_port_t *);
@@ -449,7 +430,7 @@ void		npf_nat_export(prop_dictionary_t, npf_nat_t *);
 npf_nat_t *	npf_nat_import(npf_cache_t *, npf_t *, prop_dictionary_t,
 		  npf_ruleset_t *, npf_conn_t *);
 
-int npf_nat_type(npf_nat_t *);
+int		npf_nat_type(npf_nat_t *);
 
 /* ALG interface. */
 void		npf_alg_init(npf_t *);

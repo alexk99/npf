@@ -44,17 +44,6 @@ __KERNEL_RCSID(0, "$NetBSD: npf_state.c,v 1.17 2014/07/20 00:37:41 rmind Exp $")
 
 #include "npf_impl.h"
 
-/*
- * Generic connection states and timeout table.
- *
- * Note: used for connection-less protocols.
- */
-
-#define	NPF_ANY_CONN_CLOSED		0
-#define	NPF_ANY_CONN_NEW		1
-#define	NPF_ANY_CONN_ESTABLISHED	2
-#define	NPF_ANY_CONN_NSTATES		3
-
 static const uint8_t npf_generic_fsm[NPF_ANY_CONN_NSTATES][2] = {
 	[NPF_ANY_CONN_CLOSED] = {
 		[NPF_FLOW_FORW]		= NPF_ANY_CONN_NEW,
@@ -84,6 +73,24 @@ static void (*npf_state_sample)(npf_state_t *, bool) = NULL;
 #else
 #define	NPF_STATE_SAMPLE(n, r)
 #endif
+
+/*
+ * Set generic timeout
+ */
+__dso_public void
+npf_generic_timeout_set(uint16_t prm_index, u_int timeout)
+{
+	npf_generic_timeout[prm_index] = timeout;
+}
+
+/*
+ * Get generic timeout
+ */
+__dso_public u_int
+npf_generic_timeout_get(uint16_t prm_index)
+{
+	return npf_generic_timeout[prm_index];
+}
 
 /*
  * npf_state_init: initialise the state structure.

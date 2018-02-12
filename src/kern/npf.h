@@ -372,6 +372,7 @@ typedef enum {
 	NPF_STAT_CONN_DESTROY,
 	NPF_STAT_NAT_CREATE,
 	NPF_STAT_NAT_DESTROY,
+	NPF_STAT_NAT_PORTMAP_NO_SPACE,
 	/* Invalid state cases. */
 	NPF_STAT_INVALID_STATE,
 	NPF_STAT_INVALID_STATE_TCP1,
@@ -394,5 +395,36 @@ typedef enum {
 } npf_stats_t;
 
 #define	NPF_STATS_SIZE		(sizeof(uint64_t) * NPF_STATS_COUNT)
+
+/*
+ * Generic connection states and timeout table.
+ *
+ * Note: used for connection-less protocols.
+ */
+
+#define	NPF_ANY_CONN_CLOSED		0
+#define	NPF_ANY_CONN_NEW		1
+#define	NPF_ANY_CONN_ESTABLISHED	2
+#define	NPF_ANY_CONN_NSTATES		3
+
+/*
+ * NPF TCP states.  Note: these states are different from the TCP FSM
+ * states of RFC 793.  The packet filter is a man-in-the-middle.
+ */
+#define	NPF_TCPS_OK		255
+#define	NPF_TCPS_CLOSED		0
+#define	NPF_TCPS_SYN_SENT	1
+#define	NPF_TCPS_SIMSYN_SENT	2
+#define	NPF_TCPS_SYN_RECEIVED	3
+#define	NPF_TCPS_ESTABLISHED	4
+#define	NPF_TCPS_FIN_SENT	5
+#define	NPF_TCPS_FIN_RECEIVED	6
+#define	NPF_TCPS_CLOSE_WAIT	7
+#define	NPF_TCPS_FIN_WAIT	8
+#define	NPF_TCPS_CLOSING	9
+#define	NPF_TCPS_LAST_ACK	10
+#define	NPF_TCPS_TIME_WAIT	11
+
+#define	NPF_TCP_NSTATES		12
 
 #endif	/* _NPF_NET_H_ */

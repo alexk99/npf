@@ -41,9 +41,9 @@ extern "C" {
 typedef struct npf_portmap npf_portmap_entry_t;
 	
 typedef struct npf_portmap {
-	u_int			p_refcnt;
-	uint32_t		p_bitmap[0];
 	npf_portmap_entry_t* next;
+	uint32_t p_refcnt;
+	uint32_t p_bitmap[0];
 } npf_portmap_t;
 
 typedef npf_portmap_t npf_portmap_entry_t;
