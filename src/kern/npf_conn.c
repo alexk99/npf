@@ -372,10 +372,6 @@ connkey_set_id(uint32_t *key, const uint16_t id, const int di)
 static inline void
 conn_update_atime(const npf_cache_t* npc, npf_conn_t *con)
 {
-	// todo: remove
-	// struct timespec tsnow;
-	// getnanouptime(&tsnow);
-	// con->c_atime = tsnow.tv_sec;
 	con->c_atime = npc->sec;
 }
 
@@ -1436,7 +1432,7 @@ npf_conn_import(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd,
 
 	prop_dictionary_get_uint32(cdict, "flags", &c_flags);
 
-	/* Allocate a connection and initialise it (clear first). */
+	/* Allocate a connection and initialize it (clear first). */
 	if (likely(c_flags & CONN_IPV4)) {
 		con = pool_cache_get(npf->conn_ipv4_cache, PR_WAITOK);
 		memset(con, 0, sizeof(npf_conn_ipv4_t));
