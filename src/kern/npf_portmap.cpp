@@ -241,6 +241,27 @@ npf_portmap_init(void)
 	return pm;
 }
 
+#ifdef NPF_CONN_DEBUG
+
+/*
+ * find pm by ip address
+ */
+npf_portmap_entry_t*
+npf_portmap_find(npf_portmap_hash_t* pm, uint32_t ip) 
+{
+	portmap_hash_t* hash = (portmap_hash_t*) pm->hash;
+	npf_portmap_entry_t* pm_entry;
+	bool ret;
+
+	ret = hash->find(ip, pm_entry);
+	if (ret)
+		return pm_entry;
+	else
+		return NULL;
+}
+
+#endif /* NPF_CONN_DEBUG */
+
 /*
  * Not thread safe.
  */

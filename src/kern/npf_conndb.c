@@ -301,7 +301,7 @@ npf_conndb_dequeue(npf_conndb_t *cd, npf_conn_t *con, npf_conn_t *prev)
 npf_conn_t *
 npf_conndb_getlist(npf_conndb_t *cd)
 {
-	npf_conn_t *con, *prev;
+	npf_conn_t *con, *tail;
 
 	/*
 	 * since gc might be in progress,
@@ -310,22 +310,23 @@ npf_conndb_getlist(npf_conndb_t *cd)
 	 * find out new tail, if it's not valid
 	 */
 	if (!cd->cd_tail_valid) {
-		con = cd->gc_list;
-		prev = NULL;
+		con = cd->cd_list;
+		tail = NULL;
 		while (con) {
-			prev = con;
+			tail = con;
 			con = con->c_next;
 		}
-		npf_conndb_settail(cd, prev);
+		npf_conndb_settail(cd, tail);
 	}
 
 	con = atomic_swap_ptr(&cd->cd_recent, NULL);
-	if ((prev = cd->cd_tail) == NULL) {
+	if ((tail = cd->cd_tail) == NULL) {
 		KASSERT(cd->cd_list == NULL);
 		cd->cd_list = con;
-	} else {
-		KASSERT(prev->c_next == NULL);
-		prev->c_next = con;
+	}
+	else {
+		KASSERT(tail->c_next == NULL);
+		tail->c_next = con;
 	}
 
 	/* tail is not valid anymore,

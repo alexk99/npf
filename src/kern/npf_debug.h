@@ -24,6 +24,10 @@ extern "C" {
 #define	dprintf(...)
 #endif
 
+/* log context */
+#define NPF_LOG_CONN			1
+#define NPF_LOG_CONN_DBG	2
+	
 #ifdef NPF_LOG_DEBUG
 #define npf_log g_log_func
 #else

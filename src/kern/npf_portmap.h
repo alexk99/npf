@@ -22,8 +22,6 @@ extern "C" {
 #include "sys/types.h"
 #include "stdint.h"
 	
-#define NPF_PORTMAP_MAX_ENTRIES 4096	
-	
 /* Portmap range: [ 1024 .. 65535 ] */
 #define	PORTMAP_FIRST		(1024)
 #define	PORTMAP_SIZE		((65536 - PORTMAP_FIRST) / 32)
@@ -68,6 +66,11 @@ npf_portmap_return(npf_portmap_hash_t* pm, uint32_t ip);
 
 void 
 npf_portmap_gc(npf_portmap_hash_t* pm);
+
+#ifdef NPF_CONN_DEBUG
+npf_portmap_entry_t*
+npf_portmap_find(npf_portmap_hash_t* pm, uint32_t ip);
+#endif /* NPF_CONN_DEBUG */
 
 #ifdef ALEXK_DEBUG
 void npf_portmap_test(void);

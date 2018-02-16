@@ -125,6 +125,7 @@ __KERNEL_RCSID(0, "$NetBSD: npf_conn.c,v 1.16 2015/02/05 22:04:03 rmind Exp $");
 #include "likely.h"
 
 #include "npf_conn_map.h"
+#include "npf_conn_debug.h"
 
 /*
  * Connection flags: PFIL_IN and PFIL_OUT values are reserved for direction.
@@ -718,7 +719,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	/* Initialize the protocol state. */
 	if (unlikely(!npf_state_init(npc, &con->c_state))) {
 		npf_conn_destroy(npc, npf, con);
-		npf_log("npf_conn_establish() failed: state_init() failed");
+		npf_log(NPF_LOG_CONN, "npf_conn_establish() failed: state_init() failed");
 		return NULL;
 	}
 
@@ -750,7 +751,8 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 
 		dprintf("npf_conn_conkey() failed\n");
 		npf_conn_destroy(npc, npf, con);
-		npf_log("npf_conn_establish() failed: could not create a connection key");
+		npf_log(NPF_LOG_CONN,
+				  "npf_conn_establish() failed: could not create a connection key");
 		return NULL;
 	}
 
@@ -814,7 +816,8 @@ err:
 	if (unlikely(error)) {
 		atomic_or_uint(&con->c_flags, CONN_REMOVED | CONN_EXPIRE);
 		npf_stats_inc(npf, npc, NPF_STAT_RACE_CONN);
-		npf_log("npf_conn_establish() failed: error = %d", error);
+		npf_log(NPF_LOG_CONN,
+				  "npf_conn_establish() failed: error = %d", error);
 	}
 	else {
 		dprintf("conn_establish success\n");
@@ -838,6 +841,7 @@ npf_conn_destroy(npf_cache_t *npc, npf_t *npf, npf_conn_t *con)
 		dprintf("npf_conn_destroy -> nat destroy()\n");
 		npf_nat_destroy(npc, npf, con->c_nat);
 	}
+
 	if (con->c_rproc) {
 		/* Release the rule procedure. */
 		npf_rproc_release(con->c_rproc);
@@ -1272,7 +1276,7 @@ again:
 		/* save the state */
 		if (con == NULL) {
 			/* no more connections to iterate,
-			 * next time state iteration loop from the beginning
+			 * next time start the iteration loop from the beginning
 			 */
 			cd->gc_state = NPF_GC_STATE_START;
 

@@ -175,7 +175,7 @@ typedef struct {
 }
 log_entry_t;
 
-typedef int (*npf_log_func_t)(char *format, ...);
+typedef int (*npf_log_func_t)(uint16_t context, char *format, ...);
 
 #ifdef NPF_LOG_DEBUG
 npf_log_func_t g_log_func;
@@ -424,6 +424,7 @@ void		npf_nat_dbg(void);
 void		npf_nat_destroy(npf_cache_t *, npf_t *, npf_nat_t *);
 void		npf_nat_getorig(npf_nat_t *, npf_addr_t **, in_port_t *);
 void		npf_nat_gettrans(npf_nat_t *, npf_addr_t **, in_port_t *);
+npf_portmap_t* npf_nat_get_portmap(npf_nat_t *nt);
 void		npf_nat_setalg(npf_nat_t *, npf_alg_t *, uintptr_t);
 
 void		npf_nat_export(prop_dictionary_t, npf_nat_t *);

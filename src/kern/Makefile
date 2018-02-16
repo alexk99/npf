@@ -19,7 +19,10 @@ CFLAGS+=	-Wno-unused
 #CFLAGS+=       -DNPF_DEBUG_COUNTERS
 #CFLAGS+=       -DNPF_SPINLOCK
 #CFLAGS+=       -DNPF_DEBUG_DONT_TRACK_TCP_WINDOW
-CFLAGS+=       -DMEMPOOL_DEBUG
+#CFLAGS+=	-DMEMPOOL_DEBUG
+#CFLAGS+=	-DNPF_LOG_DEBUG
+#CFLAGS+=	-DCONN_STATE_DEBUG_CHECK
+#CFLAGS+=	-DNPF_CONN_DEBUG
 
 SYSNAME:=	$(shell uname -s)
 
@@ -33,7 +36,6 @@ CFLAGS+=	-D_NPF_TESTING
 else
 CFLAGS+=	-fvisibility=hidden
 #CFLAGS+=	-DNDEBUG
-CFLAGS+=	-DCONN_STATE_DEBUG_CHECK
 LDFLAGS=	-flto
 # debug
 #CFLAGS+=	-fno-omit-frame-pointer
@@ -74,6 +76,8 @@ CPPFLAGS+=	-Wno-unused
 #CPPFLAGS+=	-DALEXK_DEBUG
 #CPPFLAGS+=	-DALEXK_DEBUG2
 #CPPFLAGS+=	-DALEXK_DEBUG3
+#CPPFLAGS+=	-DNPF_CONN_DEBUG
+#CPPFLAGS+=	-DNPF_LOG_DEBUG
 
 #
 # WARNING: All symbols must be hidden by default to not conflict with
@@ -118,6 +122,7 @@ OBJS+=		stand/murmurhash.o stand/subr_hash.o
 OBJS+=		stand/mempool.o stand/tls_pth.o
 OBJS+=		npf_portmap.o
 OBJS+=		npf_conn_map.o npf_conn_map_ipv6.o npf_city_hasher.o
+OBJS+=		npf_conn_debug.o
 #
 # Flags for the library target
 #

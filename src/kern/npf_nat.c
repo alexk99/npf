@@ -564,6 +564,7 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 		(proto != IPPROTO_TCP && proto != IPPROTO_UDP)) {
 		nt->nt_oport = 0;
 		nt->nt_tport = 0;
+		nt->n_portmap = NULL;
 		dprintf("npf_nat_create: goto out, m1\n");
 		goto out;
 	}
@@ -600,6 +601,7 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 		}
 	}
 	else {
+		nt->n_portmap = NULL;
 		nt->nt_tport = np->n_tport;
 	}
 
@@ -843,6 +845,15 @@ npf_nat_gettrans(npf_nat_t *nt, npf_addr_t **addr, in_port_t *port)
 }
 
 /*
+ * npf_nat_get_portmap: return pm
+ */
+npf_portmap_t *
+npf_nat_get_portmap(npf_nat_t *nt)
+{
+	return nt->n_portmap;
+}
+
+/*
  * npf_nat_getorig: return original IP address and port from translation entry.
  */
 void
@@ -870,6 +881,13 @@ npf_nat_dbg(void) {
 
 	printf("nt_taddr offs: %lu\n", offsetof(struct npf_nat, nt_taddr));
 	printf("nt_oaddr offs: %lu\n", offsetof(struct npf_nat, nt_oaddr));
+
+	printf("p_bitmap offs: %lu\n", offsetof(struct npf_portmap, p_bitmap));
+	printf("npf_portmap size %lu\n", sizeof(struct npf_portmap));
+
+	npf_portmap_entry_t a;
+	printf("pm %p\n", &a);
+	printf("pm.bitmap %p\n", &a.p_bitmap[0]);
 }
 
 /*
@@ -881,12 +899,9 @@ npf_nat_destroy(npf_cache_t* npc, npf_t *npf, npf_nat_t *nt)
 	npf_natpolicy_t *np = nt->nt_natpolicy;
 
 	/* Return any taken port to the portmap. */
-	if (np->n_flags & NPF_NAT_PORTMAP) {
-		if (nt->nt_tport) {
-			npf_nat_putport(nt, nt->nt_tport);
-		}
-
-		/* return portmap */
+	if ((np->n_flags & NPF_NAT_PORTMAP) != 0 && nt->nt_tport != 0 &&
+			  nt->n_portmap != NULL) {
+		npf_nat_putport(nt, nt->nt_tport);
 		uint32_t translation_ip = nt->nt_taddr.word32[0];
 		npf_portmap_return(npf->nat_portmap_hash, translation_ip);
 	}
@@ -1010,8 +1025,8 @@ npf_nat_dump(const npf_nat_t *nt)
 
 void npf_nat_debug_print_ports(npf_nat_t * nat)
 {
-	npf_log("nat_con: orig port %d, transl port %d",
-		nat->nt_oport, nat->nt_tport);
+	npf_log(NPF_LOG_CONN, "nat_con: orig port %d, transl port %d", nat->nt_oport,
+			  nat->nt_tport);
 }
 
 #endif /* ALEXK_DEBUG */
