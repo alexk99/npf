@@ -218,6 +218,10 @@ struct npf {
 	struct npf_ifmap *	ifmap;
 	unsigned		ifmap_cnt;
 
+	/* nat event callbacks */
+	npf_nat_event_create_ipv4_session_cb_t nat_event_create_ipv4_session_cb;
+	npf_nat_event_destroy_ipv4_session_cb_t nat_event_destroy_ipv4_session_cb;
+	
 	/* Associated worker thread. */
 	unsigned		worker_id;
 	void *			worker_entry;

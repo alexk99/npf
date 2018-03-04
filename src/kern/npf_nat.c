@@ -1030,3 +1030,17 @@ void npf_nat_debug_print_ports(npf_nat_t * nat)
 }
 
 #endif /* ALEXK_DEBUG */
+
+__dso_public void
+npf_nat_set_event_create_ipv4_session(npf_t * npf,
+	npf_nat_event_create_ipv4_session_cb_t cb)
+{
+	npf->nat_event_create_ipv4_session_cb = cb;
+}
+
+__dso_public void
+npf_nat_set_event_destroy_ipv4_session(npf_t * npf,
+	npf_nat_event_destroy_ipv4_session_cb_t cb)
+{
+	npf->nat_event_destroy_ipv4_session_cb = cb;
+}

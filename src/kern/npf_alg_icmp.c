@@ -230,11 +230,11 @@ npfa_icmp_inspect(npf_cache_t *npc, npf_cache_t *enpc)
 	if (npf_iscached(npc, NPC_IP4)) {
 		const struct icmp *ic = npc->npc_l4.icmp;
 		ret = npfa_icmp4_inspect(ic->icmp_type, enpc);
-	} 
+	}
 	else if (npf_iscached(npc, NPC_IP6)) {
 		const struct icmp6_hdr *ic6 = npc->npc_l4.icmp6;
 		ret = npfa_icmp6_inspect(ic6->icmp6_type, enpc);
-	} 
+	}
 	else {
 		ret = false;
 	}
@@ -256,7 +256,7 @@ static npf_conn_t *
 npfa_icmp_conn(npf_cache_t *npc, int di)
 {
 	npf_cache_t enpc;
-	
+
 	enpc.npc_ctx = npc->npc_ctx;
 	enpc.sec = npc->sec;
 	enpc.cpu_thread = npc->cpu_thread;
@@ -309,7 +309,7 @@ npfa_icmp_conn(npf_cache_t *npc, int di)
 	default:
 		return false;
 	}
-	
+
 	/* Lookup a connection using the embedded packet. */
 	return npf_conn_lookup(&enpc, di, &forw);
 }
@@ -325,7 +325,7 @@ npfa_icmp_nat(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 	npf_cache_t enpc;
 
 	dprintf("npfa_icmp_nat -- alg translate()");
-	
+
 	if (forw || !npf_iscached(npc, NPC_ICMP))
 		return false;
 	if (!npfa_icmp_inspect(npc, &enpc))
@@ -359,7 +359,7 @@ npfa_icmp_nat(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 		const struct ip *eip = enpc.npc_ip.v4;
 		ipcksum = eip->ip_sum;
 	}
-	cksum = npf_addr_cksum(cksum, enpc.npc_alen, enpc.npc_ips[which]->word32, 
+	cksum = npf_addr_cksum(cksum, enpc.npc_alen, enpc.npc_ips[which]->word32,
 		addr->word32);
 
 	switch (proto) {

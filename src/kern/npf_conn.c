@@ -988,6 +988,20 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 	/* Associate the NAT entry and release the lock. */
 	con->c_nat = nt;
 	npf_lock_exit(&con->c_lock);
+
+	/* NAT events: create session.
+	 * execute NAT event callback.
+	 */
+	if (likely((con->c_flags & CONN_IPV4) &&
+			  npf->nat_event_create_ipv4_session_cb != NULL)) {
+		npf_conn_ipv4_t * con_ipv4 = (npf_conn_ipv4_t*) con;
+		uint32_t* cfkey = con_ipv4->c_forw_entry.ck_key;
+		npf->nat_event_create_ipv4_session_cb((uint16_t) (cfkey[0] >> 16),
+				  cfkey[2], (uint16_t) (cfkey[1] >> 16),
+				  cfkey[3], (uint16_t) (cfkey[1] & 0xFFFF),
+				  con_ipv4->nt_taddr, con_ipv4->nt_tport);
+	}
+
 	return 0;
 }
 
@@ -1303,6 +1317,17 @@ again:
 
 			con = gclist;
 			while (con) {
+				/* NAT events: conn NAT session destroy */
+				if (likely((con->c_flags & CONN_IPV4) && con->c_nat != NULL &&
+						  npf->nat_event_destroy_ipv4_session_cb != NULL)) {
+					npf_conn_ipv4_t * con_ipv4 = (npf_conn_ipv4_t*) con;
+					uint32_t* cfkey = con_ipv4->c_forw_entry.ck_key;
+					npf->nat_event_destroy_ipv4_session_cb((uint16_t) (cfkey[0] >> 16),
+							  cfkey[2], (uint16_t) (cfkey[1] >> 16),
+							  cfkey[3], (uint16_t) (cfkey[1] & 0xFFFF),
+							  con_ipv4->nt_taddr, con_ipv4->nt_tport);
+				}
+
 				npf_conn_t *next = con->c_next;
 				npf_conn_destroy(npc, npf, con);
 				con = next;

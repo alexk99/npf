@@ -50,6 +50,15 @@ typedef struct {
 	void		(*setmeta)(struct ifnet *, void *);
 } npf_ifops_t;
 
+/* NAT events callback types */
+typedef void (*npf_nat_event_create_ipv4_session_cb_t) (uint16_t proto, 
+		  uint32_t src, uint16_t sport, uint32_t dst, uint16_t dport,
+		  uint32_t tsrc, uint16_t tsport);
+
+typedef void (*npf_nat_event_destroy_ipv4_session_cb_t) (uint16_t proto, 
+		  uint32_t src, uint16_t sport, uint32_t dst, uint16_t dport,
+		  uint32_t tsrc, uint16_t tsport);
+
 typedef struct {
 	struct mbuf *	(*alloc)(int, int);
 	void		(*free)(struct mbuf *);
@@ -104,5 +113,11 @@ void		npf_tcp_timeout_set(uint16_t prm_index, u_int timeout);
 u_int		npf_tcp_timeout_get(uint16_t prm_index);
 
 void npf_checkpoint(npf_t *);
+
+/* NAT events */
+void npf_nat_set_event_create_ipv4_session(npf_t * npf,
+	npf_nat_event_create_ipv4_session_cb_t cb);
+void npf_nat_set_event_destroy_ipv4_session(npf_t * npf,
+	npf_nat_event_destroy_ipv4_session_cb_t cb);
 
 #endif
