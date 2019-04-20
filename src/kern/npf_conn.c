@@ -676,8 +676,8 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	npf_conn_t *con;
 	npf_conn_ipv4_t *con_ipv4;
 	npf_conn_ipv6_t *con_ipv6;
+	uint64_t fw_key_hash, bk_key_hash;
 	int error = 0;
-	uint32_t c_back_entry_particial_hash;
 	uint32_t *fw, *bk;
 	u_int key_nwords;
 
@@ -765,8 +765,8 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	conn_update_atime(npc, con);
 
 	/* calculate keys hashes and a collision flag */
-	uint64_t fw_key_hash = npf_conndb_hash(npf->conn_db, fw, key_nwords);
-	uint64_t bk_key_hash = npf_conndb_hash(npf->conn_db, bk, key_nwords);
+	fw_key_hash = npf_conndb_hash(npf->conn_db, fw, key_nwords);
+	bk_key_hash = npf_conndb_hash(npf->conn_db, bk, key_nwords);
 
 	con->c_forw_entry_particial_hash = (uint32_t)(fw_key_hash & 0xFFFFFFFF);
 	if (con->c_forw_entry_particial_hash == (uint32_t)(bk_key_hash & 0xFFFFFFFF))
@@ -779,15 +779,13 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	 */
 	npf_lock_enter(&con->c_lock);
 
-	if (unlikely(!npf_conndb_insert(npf->conn_db, fw, key_nwords,
-			  fw_key_hash, con))) {
+	if (unlikely(!npf_conndb_insert(npf->conn_db, fw, key_nwords, con))) {
 		dprintf("core %hhu: fw conndb insert failed\n", npc->cpu_thread);
 		error = EISCONN;
 		goto err;
 	}
 
-	if (unlikely(!npf_conndb_insert(npf->conn_db, bk, key_nwords,
-			  bk_key_hash, con))) {
+	if (unlikely(!npf_conndb_insert(npf->conn_db, bk, key_nwords, con))) {
 		npf_conn_t *ret __diagused;
 		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords);
 		KASSERT(ret == con);
@@ -874,6 +872,7 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 	in_port_t tport, oport;
 	u_int tidx;
 	uint64_t hv;
+	uint32_t back_entry_particial_hash;
 
 	npf_nat_gettrans(nt, &taddr, &tport);
 	npf_nat_getorig(nt, &oaddr, &oport);
@@ -945,21 +944,18 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 
 	dprintf("back_entry: tport: %d, tidx: %d\n", tport, tidx);
 
-	/* Finally, re-insert the "backwards" entry. */
-	hv = npf_conndb_hash(npf->conn_db, bk, key_nwords);
-
 	/* Update particial hash collision flag */
-	uint32_t back_entry_particial_hash = (uint32_t)(hv & 0xFFFFFFFF);
-	if (unlikely(back_entry_particial_hash == con->c_forw_entry_particial_hash)) {
-		/* up the collision bit */
+	hv = npf_conndb_hash(npf->conn_db, bk, key_nwords);
+	back_entry_particial_hash = (uint32_t)(hv & 0xFFFFFFFF);
+	if (unlikely(back_entry_particial_hash == con->c_forw_entry_particial_hash))
+		/* up the collision flag */
 		atomic_or_uint(&con->c_flags, CONN_PARTICIAL_HASH_COLLISION);
-	}
-	else {
-		/* clear the collision bit */
+	else
+		/* clear the collision flag */
 		atomic_and_uint(&con->c_flags, ~CONN_PARTICIAL_HASH_COLLISION);
-	}
 
-	if (!npf_conndb_insert(npf->conn_db, bk, key_nwords, hv, con)) {
+	/* Finally, re-insert the "backwards" entry. */
+	if (!npf_conndb_insert(npf->conn_db, bk, key_nwords, con)) {
 		/*
 		 * Race: we have hit the duplicate, remove the "forwards"
 		 * entry and expire our connection; it is no longer valid.
@@ -1440,6 +1436,7 @@ npf_conn_import(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd,
 	const void *d;
 	u_int c_flags;
 	u_int key_nwords;
+	uint64_t forw_hv, back_hv;
 
 	prop_dictionary_get_uint32(cdict, "flags", &c_flags);
 
@@ -1505,16 +1502,20 @@ npf_conn_import(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd,
 	memcpy(bk, d, key_nwords << 2);
 
 	/* Insert the entries and the connection itself. */
-	uint64_t hv = npf_conndb_hash(cd, fw, key_nwords);
-	if (!npf_conndb_insert(cd, fw, key_nwords, hv, con)) {
+	if (!npf_conndb_insert(cd, fw, key_nwords, con)) {
 		goto err;
 	}
-	con->c_forw_entry_particial_hash = (uint32_t)(hv & 0xFFFFFFFF);
 
-	if (!npf_conndb_insert(cd, bk, key_nwords, hv, con)) {
+	if (!npf_conndb_insert(cd, bk, key_nwords, con)) {
 		npf_conndb_remove(cd, fw, key_nwords);
 		goto err;
 	}
+
+	forw_hv = npf_conndb_hash(cd, fw, key_nwords);
+	back_hv = npf_conndb_hash(cd, bk, key_nwords);
+	con->c_forw_entry_particial_hash = (uint32_t)(forw_hv & 0xFFFFFFFF);
+	if (con->c_forw_entry_particial_hash == (uint32_t)(back_hv & 0xFFFFFFFF))
+		con->c_flags |= CONN_PARTICIAL_HASH_COLLISION;
 
 	NPF_PRINTF(("NPF: imported conn %p\n", con));
 	npf_conndb_enqueue(cd, con);

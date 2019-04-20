@@ -153,7 +153,7 @@ npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
 		  bool *forw)
 {
 	npf_conn_t* con;
-	const uint64_t hv = npf_conndb_hash(cd, key, key_nwords);
+	uint64_t hv;
 
 	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS))
 		con = npf_conn_map_lookup(cd->conn_map_ipv4, key);
@@ -169,8 +169,8 @@ npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
 		*forw = (conndb_forw_cmp(con, key, key_nwords) == 0);
 	}
 	else {
-		uint32_t particial_hv = (uint32_t) (hv & 0xFFFFFFFF);
-		*forw = (con->c_forw_entry_particial_hash == particial_hv);
+		hv = npf_conndb_hash(cd, key, key_nwords);
+		*forw = (con->c_forw_entry_particial_hash == (uint32_t)(hv & 0xFFFFFFFF));
 	}
 
 	return con;
@@ -211,7 +211,7 @@ npf_conndb_forw(npf_conn_t* con, const void *key, const u_int key_nwords,
 		return (conndb_forw_cmp(con, key, key_nwords) == 0);
 	}
 	else {
-		uint32_t particial_hv = (uint32_t) hv & 0xFFFFFFFF;
+		uint32_t particial_hv = (uint32_t)(hv & 0xFFFFFFFF);
 		return (con->c_forw_entry_particial_hash == particial_hv);
 	}
 }
@@ -222,7 +222,7 @@ npf_conndb_forw(npf_conn_t* con, const void *key, const u_int key_nwords,
  */
 bool
 npf_conndb_insert(npf_conndb_t *cd, void *key, const u_int key_nwords,
-		  uint64_t hv, npf_conn_t *con)
+		  npf_conn_t *con)
 {
 	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS))
 		return npf_conn_map_insert(cd->conn_map_ipv4, key, (void *)con);

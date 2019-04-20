@@ -250,7 +250,7 @@ uint64_t
 npf_conndb_size(npf_conndb_t* cd, const u_int key_nwords);
 
 bool
-npf_conndb_insert(npf_conndb_t *, void *, const u_int, uint64_t, npf_conn_t *);
+npf_conndb_insert(npf_conndb_t *, void *, const u_int, npf_conn_t *);
 
 npf_conn_t*
 npf_conndb_remove(npf_conndb_t *, void *, const u_int);
