@@ -673,10 +673,13 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 {
 	npf_t *npf = npc->npc_ctx;
 	const nbuf_t *nbuf = npc->npc_nbuf;
-	npf_conn_t * con;
-	npf_conn_ipv4_t * con_ipv4;
-	npf_conn_ipv6_t * con_ipv6;
+	npf_conn_t *con;
+	npf_conn_ipv4_t *con_ipv4;
+	npf_conn_ipv6_t *con_ipv6;
 	int error = 0;
+	uint32_t c_back_entry_particial_hash;
+	uint32_t *fw, *bk;
+	u_int key_nwords;
 
 	dprintf("conn_establish start: per_if %d\n", per_if);
 
@@ -725,10 +728,6 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 
 	KASSERT(npf_iscached(npc, NPC_IP46));
 
-	uint32_t* fw;
-	uint32_t* bk;
-	u_int key_nwords;
-
 	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
 		con_ipv4 = (npf_conn_ipv4_t*) con;
 		fw = con_ipv4->c_forw_entry.ck_key;
@@ -769,19 +768,9 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	uint64_t fw_key_hash = npf_conndb_hash(npf->conn_db, fw, key_nwords);
 	uint64_t bk_key_hash = npf_conndb_hash(npf->conn_db, bk, key_nwords);
 
-	con->c_forw_entry_particial_hash = (uint32_t) fw_key_hash & 0xFFFFFFFF;
-	uint32_t c_back_entry_particial_hash = (uint32_t) bk_key_hash & 0xFFFFFFFF;
-	u_int hash_collision_flag =
-			  (c_back_entry_particial_hash == con->c_forw_entry_particial_hash);
-	con->c_flags |= hash_collision_flag;
-
-#ifdef ALEXK_DEBUG
-	char pref[256];
-	sprintf(pref, "core %hhu: fw", npc->cpu_thread);
-	npf_conn_conkey_print(fw, pref);
-	sprintf(pref, "core %hhu: bk", npc->cpu_thread);
-	npf_conn_conkey_print(bk, pref);
-#endif /* ALEXK_DEBUG */
+	con->c_forw_entry_particial_hash = (uint32_t)(fw_key_hash & 0xFFFFFFFF);
+	if (con->c_forw_entry_particial_hash == (uint32_t)(bk_key_hash & 0xFFFFFFFF))
+		con->c_flags |= CONN_PARTICIAL_HASH_COLLISION;
 
 	/*
 	 * Insert both keys (entries representing directions) of the
@@ -960,7 +949,7 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 	hv = npf_conndb_hash(npf->conn_db, bk, key_nwords);
 
 	/* Update particial hash collision flag */
-	uint32_t back_entry_particial_hash = (uint32_t) hv & 0xFFFFFFFF;
+	uint32_t back_entry_particial_hash = (uint32_t)(hv & 0xFFFFFFFF);
 	if (unlikely(back_entry_particial_hash == con->c_forw_entry_particial_hash)) {
 		/* up the collision bit */
 		atomic_or_uint(&con->c_flags, CONN_PARTICIAL_HASH_COLLISION);
