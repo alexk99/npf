@@ -18,21 +18,26 @@
 extern "C" {
 #endif
 	
-void* npf_conn_map_init(void);
-void npf_conn_map_fini(void* map);
+void *
+npf_conn_map_init(void);
 
-size_t npf_conn_map_hash(void* map, const void *key);
+void 
+npf_conn_map_fini(void *map);
 
-uint64_t npf_conn_map_size(void* map);
+size_t 
+npf_conn_map_hash(void *map, const void *key);
+
+uint64_t 
+npf_conn_map_size(void *map);
 
 void *
-npf_conn_map_lookup(void* map, const npf_connkey_ipv4_t *key, const size_t hv);
+npf_conn_map_lookup(void *map, const npf_connkey_ipv4_t *key);
 
 bool
-npf_conn_map_insert(void *map, const npf_connkey_ipv4_t *key, const size_t hv, void *con);
+npf_conn_map_insert(void *map, const npf_connkey_ipv4_t *key, void *con);
 
-void*
-npf_conn_map_remove(void *map, const npf_connkey_ipv4_t *key, const size_t hv);
+void *
+npf_conn_map_remove(void *map, const npf_connkey_ipv4_t *key);
 
 #ifdef __cplusplus
 }

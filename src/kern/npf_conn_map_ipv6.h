@@ -18,21 +18,23 @@
 extern "C" {
 #endif
 
-void* npf_conn_map_ipv6_init(void);
-void npf_conn_map_ipv6_fini(void* map);
+void * 
+npf_conn_map_ipv6_init(void);
 
-size_t npf_conn_map_ipv6_hash(void* map, const void *key);
+void
+npf_conn_map_ipv6_fini(void *map);
 
-uint64_t npf_conn_map_ipv6_size(void* map);
+uint64_t 
+npf_conn_map_ipv6_size(void *map);
 
 void *
-npf_conn_map_ipv6_lookup(void* map, const npf_connkey_ipv6_t *key, const size_t hv);
+npf_conn_map_ipv6_lookup(void *map, const npf_connkey_ipv6_t *key);
 
 bool
-npf_conn_map_ipv6_insert(void *map, const npf_connkey_ipv6_t *key, const size_t hv, void *con);
+npf_conn_map_ipv6_insert(void *map, const npf_connkey_ipv6_t *key, void *con);
 
-void*
-npf_conn_map_ipv6_remove(void *map, const npf_connkey_ipv6_t *key, const size_t hv);
+void *
+npf_conn_map_ipv6_remove(void *map, const npf_connkey_ipv6_t *key);
 
 #ifdef __cplusplus
 }

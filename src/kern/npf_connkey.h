@@ -14,25 +14,33 @@
 #ifndef NPF_CONN_KEY
 #define NPF_CONN_KEY
 
+typedef struct npf_ipv6_addr
+{
+	uint8_t ipv6[16];
+}
+npf_ipv6_addr_t;
+
 /*
  * See npf_conn_conkey() function for the key layout description.
  */
 #define	NPF_CONN_IPV4_KEYLEN_WORDS	4
-#define	NPF_CONN_IPV6_KEYLEN_WORDS	(2 + ((sizeof(npf_addr_t) * 2) >> 2))
+#define	NPF_CONN_IPV6_KEYLEN_WORDS	(2 + ((sizeof(npf_ipv6_addr_t) * 2) >> 2))
 #define	NPF_CONN_NKEYWORDS	(2 + ((sizeof(npf_addr_t) * 2) >> 2))
 #define	NPF_CONN_MAXKEYLEN	(NPF_CONN_NKEYWORDS * sizeof(uint32_t))
 #define	NPF_CONN_GETALEN(key)	((key)->ck_key[0] & 0xffff)
 #define	NPF_CONN_KEYLEN(key)	(8 + (2 * NPF_CONN_GETALEN(key)))
 
-
-struct npf_connkey_ipv4 {
+typedef struct npf_connkey_ipv4 
+{
 	uint32_t		ck_key[NPF_CONN_IPV4_KEYLEN_WORDS];
-};
+}
+npf_connkey_ipv4_t;
 
-struct npf_connkey_ipv6 {
+typedef struct npf_connkey_ipv6
+{
 	uint32_t		ck_key[NPF_CONN_IPV6_KEYLEN_WORDS];
-};
-
+}
+npf_connkey_ipv6_t;
 
 #endif /* NPF_CONN_KEY */
 

@@ -155,16 +155,13 @@ npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
 	npf_conn_t* con;
 	const uint64_t hv = npf_conndb_hash(cd, key, key_nwords);
 
-	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
-		con = (npf_conn_t*) npf_conn_map_lookup(cd->conn_map_ipv4, key, hv);
-	}
-	else {
-		con = (npf_conn_t*) npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key, hv);
-	}
+	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS))
+		con = (npf_conn_t *)npf_conn_map_lookup(cd->conn_map_ipv4, key);
+	else
+		con = (npf_conn_t *)npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key);
 
-	if (con == NULL) {
+	if (con == NULL)
 		return NULL;
-	}
 
 	/* determine forw */
 	if (unlikely(con->c_flags & CONN_PARTICIAL_HASH_COLLISION)) {
@@ -173,8 +170,7 @@ npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
 	}
 	else {
 		uint32_t particial_hv = (uint32_t) hv & 0xFFFFFFFF;
-		bool b = (con->c_forw_entry_particial_hash == particial_hv);
-		*forw = b;
+		*forw = (con->c_forw_entry_particial_hash == particial_hv);
 	}
 
 	return con;
@@ -184,16 +180,16 @@ npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
  * npf_conndb_lookup: find a connection given the key.
  */
 npf_conn_t *
-npf_conndb_lookup_only(npf_conndb_t *cd, const void *key, const u_int key_nwords,
-		  uint64_t* out_hv)
+npf_conndb_lookup_only(npf_conndb_t *cd, const void *key,
+		  const u_int key_nwords, uint64_t* out_hv)
 {
 	npf_conn_t* con;
 	const uint64_t hv = npf_conndb_hash(cd, key, key_nwords);
 
 	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS))
-		con = (npf_conn_t*) npf_conn_map_lookup(cd->conn_map_ipv4, key, hv);
+		con = (npf_conn_t*) npf_conn_map_lookup(cd->conn_map_ipv4, key);
 	else
-		con = (npf_conn_t*) npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key, hv);
+		con = (npf_conn_t*) npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key);
 
 	if (con == NULL)
 		return NULL;
@@ -228,12 +224,10 @@ bool
 npf_conndb_insert(npf_conndb_t *cd, void *key, const u_int key_nwords,
 		  uint64_t hv, npf_conn_t *con)
 {
-	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
-		return npf_conn_map_insert(cd->conn_map_ipv4, key, hv, (void*) con);
-	}
-	else {
-		return npf_conn_map_ipv6_insert(cd->conn_map_ipv6, key, hv, (void*) con);
-	}
+	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS))
+		return npf_conn_map_insert(cd->conn_map_ipv4, key, (void *)con);
+	else
+		return npf_conn_map_ipv6_insert(cd->conn_map_ipv6, key, (void *)con);
 }
 
 /*
@@ -244,12 +238,10 @@ npf_conn_t *
 npf_conndb_remove(npf_conndb_t *cd, void *key, const u_int key_nwords,
 		  uint64_t hv)
 {
-	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
-		return (npf_conn_t*) npf_conn_map_remove(cd->conn_map_ipv4, key, hv);
-	}
-	else {
-		return (npf_conn_t*) npf_conn_map_ipv6_remove(cd->conn_map_ipv6, key, hv);
-	}
+	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS))
+		return (npf_conn_t *)npf_conn_map_remove(cd->conn_map_ipv4, key);
+	else
+		return (npf_conn_t *)npf_conn_map_ipv6_remove(cd->conn_map_ipv6, key);
 }
 
 uint64_t

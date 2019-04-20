@@ -158,9 +158,6 @@ struct npf_conn_ipv6 {
 
 #endif
 
-typedef struct npf_connkey_ipv4 npf_connkey_ipv4_t;
-typedef struct npf_connkey_ipv6 npf_connkey_ipv6_t;
-
 typedef int (*npf_print_cb_t) (const char* msg, void* context);
 
 /* connection gc states */

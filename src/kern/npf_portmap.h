@@ -46,6 +46,8 @@ typedef struct npf_portmap {
 
 typedef npf_portmap_t npf_portmap_entry_t;
 	
+#define NPF_PORTMAP_HASH_SIZE 512
+
 typedef struct npf_portmap_hash {
 	void* hash;
 	npf_portmap_entry_t* gc_list;

@@ -16,10 +16,11 @@
 #include <stdint.h>
 #include <assert.h>
 
-#include "cuckoo/cuckoohash_map.hh"
+#include "libcuckoo/cuckoohash_map.hh"
 #include "city.h"
 #include "likely.h"
 
+#include "npf_debug.h"
 #include "npf_portmap.h"
 #include "npf_stand.h"
 #include "npf_impl.h"

@@ -59,7 +59,7 @@ endif
 ###
 ### CPP
 ###
-CPPFLAGS=	-std=c++11 -O3 -Wall -Wextra -Werror
+CPPFLAGS=	-std=c++11 -O3 -Wall -Werror
 CPPFLAGS+=	-flto
 CPPFLAGS+=	-Wpointer-arith
 CPPFLAGS+=	-I stand -D_NPF_STANDALONE #-DUSE_JUDY

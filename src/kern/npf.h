@@ -79,13 +79,6 @@ typedef uint8_t			npf_netmask_t;
 /* The number of words used. */
 #define	NPF_BPF_NWORDS		3
 
-/**/
-#define NPF_CONN_MAP_IPV4_SIZE 196608 * 4 * 8
-// #define NPF_CONN_MAP_IPV4_SIZE 1024 * 4 * 8
-
-/**/
-#define NPF_CONN_MAP_IPV6_SIZE 512 * 4
-
 /*
  * In-kernel declarations and definitions.
  */

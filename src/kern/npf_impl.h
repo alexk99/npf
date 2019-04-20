@@ -108,8 +108,6 @@ typedef struct npf_algset	npf_algset_t;
 
 typedef void (*npf_workfunc_t)(npf_t *, npf_cache_t *);
 
-#define NPF_PORTMAP_HASH_SIZE 512
-
 /*
  * Some artificial limits.
  * Note: very unlikely to have many ALGs.
