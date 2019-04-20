@@ -731,14 +731,14 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 
 	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
 		con_ipv4 = (npf_conn_ipv4_t*) con;
-		fw = &con_ipv4->c_forw_entry.ck_key[0];
-		bk = &con_ipv4->c_back_entry.ck_key[0];
+		fw = con_ipv4->c_forw_entry.ck_key;
+		bk = con_ipv4->c_back_entry.ck_key;
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
 	}
 	else {
 		con_ipv6 = (npf_conn_ipv6_t*) con;
-		fw = &con_ipv6->c_forw_entry.ck_key[0];
-		bk = &con_ipv6->c_back_entry.ck_key[0];
+		fw = con_ipv6->c_forw_entry.ck_key;
+		bk = con_ipv6->c_back_entry.ck_key;
 		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
 	}
 

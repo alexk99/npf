@@ -65,15 +65,15 @@ extern uint64_t g_debug_counter;
 inline static signed int
 conndb_forw_cmp(npf_conn_t* con, const void* key, const u_int key_nwords)
 {
-	uint32_t* p;
+	uint32_t *p;
 
 	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS)) {
-		npf_conn_ipv4_t* con_ipv4 = (npf_conn_ipv4_t*) con;
-		p = &con_ipv4->c_forw_entry.ck_key[0];
+		npf_conn_ipv4_t *con_ipv4 = (npf_conn_ipv4_t *)con;
+		p = con_ipv4->c_forw_entry.ck_key;
 	}
 	else {
-		npf_conn_ipv6_t* con_ipv6 = (npf_conn_ipv6_t*) con;
-		p = &con_ipv6->c_forw_entry.ck_key[0];
+		npf_conn_ipv6_t *con_ipv6 = (npf_conn_ipv6_t *)con;
+		p = con_ipv6->c_forw_entry.ck_key;
 	}
 
 	return memcmp(key, p, key_nwords << 2);
@@ -156,20 +156,20 @@ npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
 	const uint64_t hv = npf_conndb_hash(cd, key, key_nwords);
 
 	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS))
-		con = (npf_conn_t *)npf_conn_map_lookup(cd->conn_map_ipv4, key);
+		con = npf_conn_map_lookup(cd->conn_map_ipv4, key);
 	else
-		con = (npf_conn_t *)npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key);
+		con = npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key);
 
 	if (con == NULL)
 		return NULL;
 
 	/* determine forw */
 	if (unlikely(con->c_flags & CONN_PARTICIAL_HASH_COLLISION)) {
-		/* hash collision, we need to do full comparing */
+		/* hash collision, full comparing is needed */
 		*forw = (conndb_forw_cmp(con, key, key_nwords) == 0);
 	}
 	else {
-		uint32_t particial_hv = (uint32_t) hv & 0xFFFFFFFF;
+		uint32_t particial_hv = (uint32_t) (hv & 0xFFFFFFFF);
 		*forw = (con->c_forw_entry_particial_hash == particial_hv);
 	}
 
