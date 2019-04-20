@@ -789,7 +789,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	if (unlikely(!npf_conndb_insert(npf->conn_db, bk, key_nwords,
 			  bk_key_hash, con))) {
 		npf_conn_t *ret __diagused;
-		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords, fw_key_hash);
+		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords);
 		KASSERT(ret == con);
 		error = EISCONN;
 		dprintf("core %hhu: bk conndb insert failed\n", npc->cpu_thread);
@@ -873,6 +873,7 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 	npf_addr_t *taddr, *oaddr;
 	in_port_t tport, oport;
 	u_int tidx;
+	uint64_t hv;
 
 	npf_nat_gettrans(nt, &taddr, &tport);
 	npf_nat_getorig(nt, &oaddr, &oport);
@@ -933,8 +934,7 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 	}
 
 	/* Remove the "backwards" entry. */
-	uint64_t hv = npf_conndb_hash(npf->conn_db, bk, key_nwords);
-	ret = npf_conndb_remove(npf->conn_db, bk, key_nwords, hv);
+	ret = npf_conndb_remove(npf->conn_db, bk, key_nwords);
 	KASSERT(ret == con);
 
 	/* Set the source/destination IDs to the translation values. */
@@ -964,8 +964,7 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 		 * Race: we have hit the duplicate, remove the "forwards"
 		 * entry and expire our connection; it is no longer valid.
 		 */
-		uint64_t hash = npf_conndb_hash(npf->conn_db, fw, key_nwords);
-		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords, hash);
+		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords);
 		KASSERT(ret == con);
 
 		atomic_or_uint(&con->c_flags, CONN_REMOVED | CONN_EXPIRE);
@@ -1095,7 +1094,6 @@ npf_conn_gc(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd, bool flush,
 {
 	npf_conn_t *con, *prev, *gclist = NULL;
 	struct timespec tsnow;
-	uint64_t hv;
 	u_int key_nwords;
 	uint32_t *bk, *fw;
 
@@ -1135,12 +1133,10 @@ npf_conn_gc(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd, bool flush,
 		if ((con->c_flags & CONN_REMOVED) == 0) {
 			npf_conn_t *ret __diagused;
 
-			hv = npf_conndb_hash(cd, fw, key_nwords);
-			ret = npf_conndb_remove(cd, fw, key_nwords, hv);
+			ret = npf_conndb_remove(cd, fw, key_nwords);
 			KASSERT(ret == con);
 
-			hv = npf_conndb_hash(cd, bk, key_nwords);
-			ret = npf_conndb_remove(cd, bk, key_nwords, hv);
+			ret = npf_conndb_remove(cd, bk, key_nwords);
 			KASSERT(ret == con);
 		}
 
@@ -1199,7 +1195,6 @@ npf_conn_gc_async(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd, bool flush,
 {
 	npf_conn_t *con, *prev, *gclist;
 	struct timespec tsnow;
-	uint64_t hv;
 	u_int key_nwords;
 	uint32_t *bk, *fw;
 
@@ -1253,12 +1248,10 @@ again:
 			if ((con->c_flags & CONN_REMOVED) == 0) {
 				npf_conn_t *ret __diagused;
 
-				hv = npf_conndb_hash(cd, fw, key_nwords);
-				ret = npf_conndb_remove(cd, fw, key_nwords, hv);
+				ret = npf_conndb_remove(cd, fw, key_nwords);
 				KASSERT(ret == con);
 
-				hv = npf_conndb_hash(cd, bk, key_nwords);
-				ret = npf_conndb_remove(cd, bk, key_nwords, hv);
+				ret = npf_conndb_remove(cd, bk, key_nwords);
 				KASSERT(ret == con);
 			}
 
@@ -1516,11 +1509,10 @@ npf_conn_import(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd,
 	if (!npf_conndb_insert(cd, fw, key_nwords, hv, con)) {
 		goto err;
 	}
-	con->c_forw_entry_particial_hash = (uint32_t) hv & 0xFFFFFFFF;
+	con->c_forw_entry_particial_hash = (uint32_t)(hv & 0xFFFFFFFF);
 
-	hv = npf_conndb_hash(cd, bk, key_nwords);
 	if (!npf_conndb_insert(cd, bk, key_nwords, hv, con)) {
-		npf_conndb_remove(cd, fw, key_nwords, hv);
+		npf_conndb_remove(cd, fw, key_nwords);
 		goto err;
 	}
 

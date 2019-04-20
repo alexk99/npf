@@ -235,8 +235,7 @@ npf_conndb_insert(npf_conndb_t *cd, void *key, const u_int key_nwords,
  * it represents.
  */
 npf_conn_t *
-npf_conndb_remove(npf_conndb_t *cd, void *key, const u_int key_nwords,
-		  uint64_t hv)
+npf_conndb_remove(npf_conndb_t *cd, void *key, const u_int key_nwords)
 {
 	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS))
 		return (npf_conn_t *)npf_conn_map_remove(cd->conn_map_ipv4, key);
