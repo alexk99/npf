@@ -56,6 +56,9 @@ CFLAGS+=	-D_POSIX_C_SOURCE=200809L
 CFLAGS+=	-D_DEFAULT_SOURCE
 endif
 
+CFLAGS+=	-DNPF_CONNMAP_THMAP
+#CFLAGS+=	-DNPF_CONNMAP_EFFICIENT_CUCKOO
+
 ###
 ### CPP
 ###
@@ -78,6 +81,9 @@ CPPFLAGS+=	-Wno-unused
 #CPPFLAGS+=	-DALEXK_DEBUG3
 #CPPFLAGS+=	-DNPF_CONN_DEBUG
 #CPPFLAGS+=	-DNPF_LOG_DEBUG
+
+CPPFLAGS+=	-DNPF_CONNMAP_THMAP
+#CPPFLAGS+=	-DNPF_CONNMAP_EFFICIENT_CUCKOO
 
 #
 # WARNING: All symbols must be hidden by default to not conflict with
@@ -122,7 +128,7 @@ OBJS+=		stand/murmurhash.o stand/subr_hash.o
 OBJS+=		stand/mempool.o stand/tls_pth.o
 OBJS+=		npf_portmap.o
 OBJS+=		npf_conn_map.o npf_conn_map_ipv6.o npf_city_hasher.o
-OBJS+=		npf_conn_debug.o
+OBJS+=		npf_conn_debug.o thmap.o npf_conn_thmap.o
 #
 # Flags for the library target
 #

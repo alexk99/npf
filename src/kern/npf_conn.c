@@ -127,6 +127,10 @@ __KERNEL_RCSID(0, "$NetBSD: npf_conn.c,v 1.16 2015/02/05 22:04:03 rmind Exp $");
 #include "npf_conn_map.h"
 #include "npf_conn_debug.h"
 
+#ifdef NPF_CONNMAP_THMAP
+#include "thmap.h"
+#endif
+
 /*
  * Connection flags: PFIL_IN and PFIL_OUT values are reserved for direction.
  */
@@ -1193,6 +1197,9 @@ npf_conn_gc_async(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd, bool flush,
 	struct timespec tsnow;
 	u_int key_nwords;
 	uint32_t *bk, *fw;
+#ifdef NPF_CONNMAP_THMAP
+	void *gcref;
+#endif
 
 	getnanouptime(&tsnow);
 
@@ -1278,6 +1285,9 @@ again:
 			 * Ensure it is safe to destroy the connections.
 			 * Note: drop the conn_lock (see the lock order).
 			 */
+#ifdef NPF_CONNMAP_THMAP
+			gcref = thmap_stage_gc(cd->conn_map_ipv4);
+#endif
 			if (sync) {
 				npf_lock_exit(&npf->conn_lock);
 				if (gclist) {
@@ -1292,6 +1302,10 @@ again:
 			 * May need to wait for the references to drain.
 			 */
 			pserialize_perform(npf->qsbr);
+
+#ifdef NPF_CONNMAP_THMAP
+			thmap_gc(cd->conn_map_ipv4, gcref);
+#endif
 
 			con = gclist;
 			while (con) {

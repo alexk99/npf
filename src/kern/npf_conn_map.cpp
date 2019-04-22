@@ -11,6 +11,8 @@
  * Created on June 6, 2016, 10:08 PM
  */
 
+#ifdef NPF_CONNMAP_EFFICIENT_CUCKOO
+
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -98,7 +100,7 @@ npf_conn_map_remove(void *map, const npf_connkey_ipv4_t *key)
 {
 	con_map_t *cmap = (con_map_t *)map;
 	void *removed_con = NULL;
-	
+
 	auto fn = [&removed_con](void *&con) {
 		removed_con = con;
 		return true;
@@ -106,3 +108,5 @@ npf_conn_map_remove(void *map, const npf_connkey_ipv4_t *key)
 	
 	return cmap->erase_fn(*key, fn) ? removed_con : NULL;
 }
+
+#endif /* NPF_CONNMAP_EFFICIENT_CUCKOO */

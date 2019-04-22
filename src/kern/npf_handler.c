@@ -516,12 +516,10 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		 * Release the reference on a connection.  Release the reference
 		 * on a rule procedure only if there was no association.
 		 */
-		if (*con) {
+		if (*con)
 			npf_conn_release(*con);
-		}
-		else if (rp_v[i]) {
+		else if (rp_v[i])
 			npf_rproc_release(rp_v[i]);
-		}
 
 		/* Reset mbuf pointer before returning to the caller. */
 		struct mbuf* mp = nbuf_head_mbuf(nbuf);
@@ -559,9 +557,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 			dprintf2("destroy 3\n");
 		}
 
-		if (!error_v[i]) {
+		if (!error_v[i])
 			error_v[i] = ENETUNREACH;
-		}
 
 		if (mp) {
 			/* Free the mbuf chain. */
@@ -571,9 +568,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		}
 
 		ret_v[i] = error_v[i];
-		if (ret_v[i]) {
+		if (ret_v[i])
 			errors = true;
-		}
 	}
 
 	*out_destroyed_packets_bitfld = destroyed_packets_bitfld;

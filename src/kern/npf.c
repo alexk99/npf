@@ -56,6 +56,10 @@ __KERNEL_RCSID(0, "$NetBSD: npf.c,v 1.22 2014/07/25 08:10:40 dholland Exp $");
 #include <stdlib.h>
 #include "npf_alg_icmp.h"
 
+#ifdef ALEXK_DEBUG
+#include "npf_conn_map.h"
+#endif
+
 #ifdef NPF_DEBUG_COUNTERS
 uint64_t g_debug_counter;
 uint64_t g_conn_map_size;
@@ -135,6 +139,7 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 
 #ifdef ALEXK_DEBUG
 	npf_portmap_test();
+	npf_thmap_test();
 #endif
 
 	npf_ifmap_init(npf, ifops);

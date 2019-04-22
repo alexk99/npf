@@ -24,9 +24,6 @@ npf_conn_map_init(void);
 void 
 npf_conn_map_fini(void *map);
 
-size_t 
-npf_conn_map_hash(void *map, const void *key);
-
 uint64_t 
 npf_conn_map_size(void *map);
 
@@ -38,6 +35,13 @@ npf_conn_map_insert(void *map, const npf_connkey_ipv4_t *key, void *con);
 
 void *
 npf_conn_map_remove(void *map, const npf_connkey_ipv4_t *key);
+
+#ifdef ALEXK_DEBUG
+
+void
+npf_thmap_test(void);
+
+#endif /* ALEXK_DEBUG */
 
 #ifdef __cplusplus
 }
