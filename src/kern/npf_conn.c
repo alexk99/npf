@@ -397,7 +397,6 @@ npf_conn_t *
 npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 {
 	npf_t *npf = npc->npc_ctx;
-	npf_conndb_t* conndb = npf->conn_db;
 	u_int key_nwords;
 
 	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
@@ -405,10 +404,6 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 	}
 	else {
 		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
-	}
-
-	if (npf_conndb_size(conndb, key_nwords) == 0) {
-		return NULL;
 	}
 
 	/* note: ipv6 key type can be used for both ipv4 and ipv6 connections */
@@ -479,9 +474,6 @@ npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t* con_key, uint64_t* out_h
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
 	else
 		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
-
-	if (npf_conndb_size(conndb, key_nwords) == 0)
-		return NULL;
 
 	/* Construct a key and lookup for a connection in the store. */
 	if (unlikely(!npf_conn_conkey(npc, con_key, true)))
