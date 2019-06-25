@@ -126,6 +126,8 @@ __KERNEL_RCSID(0, "$NetBSD: npf_conn.c,v 1.16 2015/02/05 22:04:03 rmind Exp $");
 
 #include "npf_conn_map.h"
 #include "npf_conn_debug.h"
+#include "npf_pptp_gre.h"
+#include "npf_print_debug.h"
 
 #ifdef NPF_CONNMAP_THMAP
 #include "thmap.h"
@@ -266,6 +268,8 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 	const u_int alen = npc->npc_alen;
 	const struct tcphdr *th;
 	const struct udphdr *uh;
+	const struct pptp_gre_context *pptp_gre_ctx;
+	const struct pptp_gre_hdr *pptp_gre_hdr;
 	u_int keylen, isrc, idst;
 	uint16_t id[2];
 
@@ -305,6 +309,37 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 			break;
 		}
 		return 0;
+	case IPPROTO_GRE:
+		KASSERT(npf_iscached(npc, NPC_ALG_PPTP_GRE | NPC_ALG_PPTP_GRE_CTX));
+		if (npf_iscached(npc, NPC_ALG_PPTP_GRE_CTX)) {
+			pptp_gre_ctx = npc->npc_l4.pptp_gre_ctx;
+			if (forw) {
+				/* pptp client -> pptp server */
+				id[NPF_SRC] = pptp_gre_ctx->server_call_id;
+				id[NPF_DST] = 0; /* not used */
+			}
+			else {
+				/* pptp client <- pptp server */
+				id[NPF_SRC] = 0; /* not used */
+				id[NPF_DST] = pptp_gre_ctx->client_call_id;
+			}
+			NPF_DPRINTFCL(NPF_DC_GRE, 50,
+					  "gre key ctx: src_id %hu, dst_id %hu, forw %d\n",
+					  id[NPF_SRC], id[NPF_DST], forw);
+		} else {
+			/* NPC_ALG_PPTP_GRE */
+			pptp_gre_hdr = npc->npc_l4.pptp_gre;
+			id[NPF_SRC] = pptp_gre_hdr->call_id;
+			id[NPF_DST] = 0; /* not used */
+
+			NPF_DPRINTFCL(NPF_DC_GRE, 80,
+					  "gre key hdr: src ip %u, dst ip %u, src_id %hu, dst_id %hu, "
+					  "forw %d\n",
+					  npc->npc_ips[NPF_SRC]->word32[0],
+					  npc->npc_ips[NPF_DST]->word32[0],
+					  id[NPF_SRC], id[NPF_DST], forw);
+		}
+		break;
 	default:
 		/* Unsupported protocol. */
 		return 0;
@@ -344,6 +379,18 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 		keylen = (2 + (nwords * 2)) * sizeof(uint32_t);
 	}
 	return keylen;
+}
+
+void
+npf_conn_init_ipv4_key(void *key_p, uint16_t proto,
+		  uint16_t src_id, uint16_t dst_id, uint32_t src_ip, uint32_t dst_ip)
+{
+	uint32_t *key = key_p;
+
+	key[0] = ((uint32_t)proto << 16) | sizeof(uint32_t);
+	key[1] = ((uint32_t)src_id << 16) | dst_id;
+	key[2] = src_ip;
+	key[3] = dst_ip;
 }
 
 void
@@ -677,12 +724,13 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	uint32_t *fw, *bk;
 	u_int key_nwords;
 
-	dprintf("conn_establish start: per_if %d\n", per_if);
+	NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 70,
+			  "conn_establish start: per_if %d\n", per_if);
 
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
 
 	if (unlikely(!npf_conn_trackable_p(npc))) {
-	   dprintf("conn is not trackable\n");
+		NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 70, "conn is not trackable\n");
 		return NULL;
 	}
 
@@ -707,7 +755,8 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 		npf_worker_signal(npf);
 		return NULL;
 	}
-	NPF_PRINTF(("NPF: create conn %p\n", con));
+	NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 70,
+			  "NPF: create conn %p\n", con);
 	npf_stats_inc(npf, npc, NPF_STAT_CONN_CREATE);
 
 	npf_lock_init(&con->c_lock, MUTEX_DEFAULT, IPL_SOFTNET);
@@ -718,6 +767,8 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	/* Initialize the protocol state. */
 	if (unlikely(!npf_state_init(npc, &con->c_state))) {
 		npf_conn_destroy(npc, npf, con);
+		NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 30,
+				  "npf_conn_establish() failed: state_init() failed\n");
 		npf_log(NPF_LOG_CONN, "npf_conn_establish() failed: state_init() failed");
 		return NULL;
 	}
@@ -744,7 +795,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	if (unlikely(!npf_conn_conkey(npc, fw, true) ||
 	    !npf_conn_conkey(npc, bk, false))) {
 
-		dprintf("npf_conn_conkey() failed\n");
+		NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 30, "npf_conn_conkey() failed\n");
 		npf_conn_destroy(npc, npf, con);
 		npf_log(NPF_LOG_CONN,
 				  "npf_conn_establish() failed: could not create a connection key");
@@ -776,7 +827,12 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	npf_lock_enter(&con->c_lock);
 
 	if (unlikely(!npf_conndb_insert(npf->conn_db, fw, key_nwords, con))) {
-		dprintf("core %hhu: fw conndb insert failed\n", npc->cpu_thread);
+		NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 30,
+				  "core %hhu: fw conndb insert failed\n", npc->cpu_thread);
+		NPF_HEX_DUMPCL(NPF_DC_ESTABL_CON, 30,
+				  "fw conndb key", fw, NPF_CONN_IPV4_KEYLEN_WORDS * 4);
+
+
 		error = EISCONN;
 		goto err;
 	}
@@ -786,7 +842,8 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords);
 		KASSERT(ret == con);
 		error = EISCONN;
-		dprintf("core %hhu: bk conndb insert failed\n", npc->cpu_thread);
+		NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 30,
+				  "core %hhu: bk conndb insert failed\n", npc->cpu_thread);
 		goto err;
 	}
 
@@ -803,7 +860,8 @@ err:
 				  "npf_conn_establish() failed: error = %d", error);
 	}
 	else {
-		dprintf("conn_establish success\n");
+		NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 70,
+				  "conn_establish success\n");
 		NPF_PRINTF(("NPF: establish conn %p\n", con));
 	}
 
@@ -1189,6 +1247,8 @@ npf_conn_gc_async(npf_cache_t* npc, npf_t *npf, npf_conndb_t *cd, bool flush,
 	struct timespec tsnow;
 	u_int key_nwords;
 	uint32_t *bk, *fw;
+	npfa_funcs_t *alg_funcs;
+	npf_alg_t *alg;
 #ifdef NPF_CONNMAP_THMAP
 	void *gcref;
 #endif
@@ -1310,6 +1370,15 @@ again:
 							  cfkey[2], (uint16_t) (cfkey[1] >> 16),
 							  cfkey[3], (uint16_t) (cfkey[1] & 0xFFFF),
 							  con_ipv4->nt_taddr, con_ipv4->nt_tport);
+				}
+
+				/* run NAT ALG destroy callback */
+				if (con->c_nat != NULL &&
+						  (alg = npf_nat_get_alg(con->c_nat)) != NULL) {
+					/* lookup ALG */
+					alg_funcs = npf_alg_get_funcs(npf, alg);
+					if (alg_funcs->destroy != NULL)
+						alg_funcs->destroy(npf, con);
 				}
 
 				npf_conn_t *next = con->c_next;

@@ -19,7 +19,7 @@
 #include "likely.h"
 #include "npf_connkey.h"
 #include "npf_conn_map.h"
-#include "npf_debug.h"
+#include "npf_print_debug.h"
 #include "thmap.h"
 #include <assert.h>
 

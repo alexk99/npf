@@ -55,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: npf.c,v 1.22 2014/07/25 08:10:40 dholland Exp $");
 
 #include <stdlib.h>
 #include "npf_alg_icmp.h"
+#include "npf_alg_pptp.h"
 
 #ifdef ALEXK_DEBUG
 #include "npf_conn_map.h"
@@ -137,7 +138,7 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 		return NULL;
 	}
 
-#ifdef ALEXK_DEBUG
+#ifdef ALEXK_DEBUG2
 	npf_portmap_test();
 	npf_thmap_test();
 #endif
@@ -159,9 +160,6 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 
 	/* Load an empty configuration. */
 	npf_config_init(npf);
-
-	/* init icmp alg */
-	npf_alg_icmp_modcmd(MODULE_CMD_INIT, npf);
 
 	return npf;
 }
@@ -294,4 +292,26 @@ __dso_public void
 npf_conndb_state_summary(npf_t* npf, npf_print_cb_t print_line_cb, void* context)
 {
 	npf_conndb_print_state_summary(npf->conn_db, print_line_cb, context);
+}
+
+__dso_public int
+npf_nat_alg_init(npf_t *npf, const char *name)
+{
+	if (strcmp(name, "icmp") == 0)
+		return npf_alg_icmp_modcmd(MODULE_CMD_INIT, npf);
+	else if (strcmp(name, "pptp") == 0)
+		return npf_alg_pptp_modcmd(MODULE_CMD_INIT, npf);
+	else
+		return ENOENT;
+}
+
+__dso_public int
+npf_nat_alg_fini(npf_t *npf, const char *name)
+{
+	if (strcmp(name, "icmp") == 0)
+		return npf_alg_icmp_modcmd(MODULE_CMD_FINI, npf);
+	else if (strcmp(name, "pptp") == 0)
+		return npf_alg_pptp_modcmd(MODULE_CMD_FINI, npf);
+	else
+		return ENOENT;
 }

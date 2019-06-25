@@ -20,7 +20,7 @@
 #include "city.h"
 #include "likely.h"
 #include "npf_connkey.h"
-#include "npf_debug.h"
+#include "npf_print_debug.h"
 
 #include "npf_conn_map.h"
 

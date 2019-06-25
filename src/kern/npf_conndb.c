@@ -343,9 +343,9 @@ npf_conndb_settail(npf_conndb_t *cd, npf_conn_t *con)
 /*
  *
  */
-
-#define CONNDB_NON_TCP_STATE 12
-#define CONNDB_STATE_CNT (NPF_TCP_NSTATES + 1)
+#define CONNDB_NON_TCP_STATE NPF_TCP_NSTATES
+#define CONNDB_GRE_STATE (NPF_TCP_NSTATES + 1)
+#define CONNDB_STATE_CNT (NPF_TCP_NSTATES + 2)
 
 void
 npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
@@ -365,6 +365,10 @@ npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
 				state = conn->c_state.nst_state;
 				assert(state < NPF_TCP_NSTATES);
 				tcp_state_cnts[state]++;
+				break;
+
+			case IPPROTO_GRE:
+				tcp_state_cnts[CONNDB_GRE_STATE]++;
 				break;
 
 			default:
@@ -388,10 +392,11 @@ npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
 		"fin_received",	/* 6 */
 		"close_wait",		/* 7 */
 		"fin_wait",			/* 8 */
-		"closing",			/* 9 */
+		"closing\t",			/* 9 */
 		"last_ack",			/* 10 */
 		"time_wait",		/* 11 */
-		"non_tcp",			/* 12 */
+		"non_tcp\t",			/* 12 */
+		"gre\t",				/* 13 */
 	};
 
 	sprintf(msg, "state\t\t\tcnt");
@@ -400,7 +405,7 @@ npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
 	print_line_cb(msg, context);
 
 	for (i=0; i<CONNDB_STATE_CNT; i++) {
-		sprintf(msg, "%s:\t\t%u", tcp_state_names[i], tcp_state_cnts[i]);
+		sprintf(msg, "%s\t\t%u", tcp_state_names[i], tcp_state_cnts[i]);
 		print_line_cb(msg, context);
 	}
 }

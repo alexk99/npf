@@ -184,6 +184,10 @@ unsigned
 npf_conn_conkey(const npf_cache_t *, uint32_t *, bool);
 
 void
+npf_conn_init_ipv4_key(void *, uint16_t, uint16_t, uint16_t, uint32_t,
+		  uint32_t);
+
+void
 npf_conn_conkey_print(uint32_t *key, const char* pref);
 
 npf_conn_t *

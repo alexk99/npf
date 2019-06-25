@@ -363,15 +363,12 @@ npf_nat_getid(const npf_natpolicy_t *np)
  * => Returns in network byte-order.
  * => Zero indicates failure.
  */
-static in_port_t
-npf_nat_getport(npf_nat_t *nt)
+in_port_t
+npf_portmap_getport(npf_portmap_t *pm)
 {
-	npf_portmap_t *pm = nt->n_portmap;
-	npf_natpolicy_t* np = nt->nt_natpolicy;
 	u_int n = PORTMAP_SIZE, idx, bit;
 	uint32_t map, nmap;
 
-	KASSERT((np->n_flags & NPF_NAT_PORTMAP) != 0);
 	KASSERT(pm->p_refcnt > 0);
 
 	idx = cprng_fast32() % PORTMAP_SIZE;
@@ -400,16 +397,12 @@ npf_nat_getport(npf_nat_t *nt)
 /*
  * npf_nat_takeport: allocate specific port in the NAT policy portmap.
  */
-static bool
-npf_nat_takeport(npf_nat_t *nt)
+bool
+npf_portmap_takeport(npf_portmap_t *pm, in_port_t port)
 {
-	npf_natpolicy_t *np = nt->nt_natpolicy;
-	npf_portmap_t *pm = nt->n_portmap;
 	uint32_t map, nmap;
 	u_int idx, bit;
-	in_port_t port = nt->nt_tport;
 
-	KASSERT((np->n_flags & NPF_NAT_PORTMAP) != 0);
 	KASSERT(pm->p_refcnt > 0);
 
 	port = ntohs(port) - PORTMAP_FIRST;
@@ -429,15 +422,12 @@ npf_nat_takeport(npf_nat_t *nt)
  *
  * => Port should be in network byte-order.
  */
-static void
-npf_nat_putport(npf_nat_t *nt, in_port_t port)
+void
+npf_portmap_putport(npf_portmap_t *pm, in_port_t port)
 {
-	npf_natpolicy_t *np = nt->nt_natpolicy;
-	npf_portmap_t *pm = nt->n_portmap;
 	uint32_t map, nmap;
 	u_int idx, bit;
 
-	KASSERT((np->n_flags & NPF_NAT_PORTMAP) != 0);
 	KASSERT(pm->p_refcnt > 0);
 
 	port = ntohs(port) - PORTMAP_FIRST;
@@ -448,6 +438,54 @@ npf_nat_putport(npf_nat_t *nt, in_port_t port)
 		KASSERT(map | (1 << bit));
 		nmap = map & ~(1 << bit);
 	} while (atomic_cas_32(&pm->p_bitmap[idx], map, nmap) != map);
+}
+
+/*
+ * npf_nat_getport: allocate and return a port in the NAT policy portmap.
+ *
+ * => Returns in network byte-order.
+ * => Zero indicates failure.
+ */
+static in_port_t
+npf_nat_getport(npf_nat_t *nt)
+{
+	npf_natpolicy_t *np = nt->nt_natpolicy;
+	npf_portmap_t *pm = nt->n_portmap;
+
+	KASSERT((np->n_flags & NPF_NAT_PORTMAP) != 0);
+
+	return npf_portmap_getport(pm);
+}
+
+/*
+ * npf_nat_takeport: allocate specific port in the NAT policy portmap.
+ */
+static bool
+npf_nat_takeport(npf_nat_t *nt)
+{
+	npf_natpolicy_t *np = nt->nt_natpolicy;
+	npf_portmap_t *pm = nt->n_portmap;
+	in_port_t port = nt->nt_tport;
+
+	KASSERT((np->n_flags & NPF_NAT_PORTMAP) != 0);
+
+	return npf_portmap_takeport(pm, port);
+}
+
+/*
+ * npf_nat_putport: return port as available in the NAT policy portmap.
+ *
+ * => Port should be in network byte-order.
+ */
+static void
+npf_nat_putport(npf_nat_t *nt, in_port_t port)
+{
+	npf_natpolicy_t *np = nt->nt_natpolicy;
+	npf_portmap_t *pm = nt->n_portmap;
+
+	KASSERT((np->n_flags & NPF_NAT_PORTMAP) != 0);
+
+	npf_portmap_putport(pm, port);
 }
 
 /*
@@ -669,7 +707,7 @@ npf_nat_translate(npf_cache_t *npc, npf_conn_t *con, bool forw)
 
 	/* Execute ALG translation first. */
 	if (unlikely((npc->npc_info & NPC_ALG_EXEC) == 0)) {
-		dprintf("npf_alg_exec\n");
+		dprintf("npf_alg_exec con %p, nt %p\n", con, con->c_nat);
 		npc->npc_info |= NPC_ALG_EXEC;
 		npf_alg_exec(npc, con->c_nat, forw);
 		npf_recache(npc);
@@ -700,6 +738,35 @@ npf_nat_algo(npf_cache_t *npc, const npf_natpolicy_t *np, bool forw)
 	}
 
 	return error;
+}
+
+/*
+ * Associate a NAT policy with a existing connection
+ */
+int
+npf_nat_share_policy(npf_cache_t *npc, npf_conn_t *con, npf_nat_t *src_nt)
+{
+	npf_nat_t *nt;
+	npf_natpolicy_t *np;
+	int ret;
+
+	np = src_nt->nt_natpolicy;
+
+	/* Create a new NAT entry. */
+	nt = npf_nat_create(npc, np, con);
+	if (unlikely(nt == NULL))
+		return ENOMEM;
+	atomic_inc_uint(&np->n_refcnt);
+
+	/* Associate the NAT translation entry with the connection. */
+	ret = npf_conn_setnat(npc, con, nt, np->n_type);
+	if (unlikely(ret)) {
+		/* Will release the reference. */
+		npf_nat_destroy(npc, npc->npc_ctx, nt);
+		return ret;
+	}
+
+	return 0;
 }
 
 /*
@@ -873,6 +940,24 @@ npf_nat_setalg(npf_nat_t *nt, npf_alg_t *alg, uintptr_t arg)
 	nt->nt_alg_arg = arg;
 }
 
+npf_alg_t *
+npf_nat_get_alg(const npf_nat_t *nt)
+{
+	return nt->nt_alg;
+}
+
+uintptr_t
+npf_nat_get_alg_arg(const npf_nat_t *nt)
+{
+	return nt->nt_alg_arg;
+}
+
+void
+npf_nat_set_alg_arg(npf_nat_t *nt, uintptr_t arg)
+{
+	nt->nt_alg_arg = arg;
+}
+
 __dso_public void
 npf_nat_dbg(void) {
 	printf("n_portmap offs: %lu\n", offsetof(struct npf_nat, n_portmap));
@@ -976,7 +1061,7 @@ npf_nat_import(npf_cache_t* npc, npf_t *npf, prop_dictionary_t natdict,
 
 	/* get portmap */
 	uint32_t translation_ip = nt->nt_taddr.word32[0];
-	npf_portmap_get(npf->nat_portmap_hash, translation_ip);
+	nt->n_portmap = npf_portmap_get(npf->nat_portmap_hash, translation_ip);
 
 	/* Take a specific port from port-map. */
 	if ((np->n_flags & NPF_NAT_PORTMAP) != 0 && nt->nt_tport &

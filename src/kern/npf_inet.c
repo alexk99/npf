@@ -60,6 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: npf_inet.c,v 1.32 2014/07/20 00:37:41 rmind Exp $");
 #endif
 
 #include "npf_impl.h"
+#include "npf_pptp_gre.h"
 
 /*
  * npf_fixup{16,32}_cksum: incremental update of the Internet checksum.
@@ -464,21 +465,11 @@ again:
 	}
 	hlen = npc->npc_hlen;
 
-	// todo
-	char* p;
-
 	switch (npc->npc_proto) {
 	case IPPROTO_TCP:
 		/* Cache: layer 4 - TCP. */
-
-		// todo
-		p = (char*) nbuf->nb_nptr;
-		p += hlen;
-		nbuf->nb_nptr = p;
-		npc->npc_l4.tcp = (struct tcphdr*) p;
-
-//		npc->npc_l4.tcp = nbuf_advance(nbuf, hlen,
-//		    sizeof(struct tcphdr));
+		npc->npc_l4.tcp = nbuf_advance(nbuf, hlen,
+		    sizeof(struct tcphdr));
 		l4flags = NPC_LAYER4 | NPC_TCP;
 		break;
 	case IPPROTO_UDP:
@@ -501,6 +492,12 @@ again:
 		npc->npc_l4.icmp6 = nbuf_advance(nbuf, hlen,
 		    offsetof(struct icmp6_hdr, icmp6_data32));
 		l4flags = NPC_LAYER4 | NPC_ICMP;
+		break;
+	case IPPROTO_GRE:
+		/* Cache: layer 4 - GRE. */
+		npc->npc_l4.pptp_gre = nbuf_advance(nbuf, hlen,
+		    sizeof(struct pptp_gre_hdr));
+		l4flags = NPC_LAYER4 | NPC_ALG_PPTP_GRE;
 		break;
 	default:
 		l4flags = 0;
@@ -600,8 +597,9 @@ npf_rwrcksum(const npf_cache_t *npc, u_int which,
 		KASSERT(npf_iscached(npc, NPC_IP6));
 	}
 
-	/* Nothing else to do for ICMP. */
-	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6) {
+	/* Nothing else to do for ICMP, GRE */
+	if (proto == IPPROTO_ICMP || proto == IPPROTO_ICMPV6 ||
+			  proto == IPPROTO_GRE) {
 		return true;
 	}
 	KASSERT(npf_iscached(npc, NPC_TCP) || npf_iscached(npc, NPC_UDP));

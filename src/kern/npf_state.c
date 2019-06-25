@@ -118,6 +118,7 @@ npf_state_init(npf_cache_t *npc, npf_state_t *nst)
 		break;
 	case IPPROTO_UDP:
 	case IPPROTO_ICMP:
+	case IPPROTO_GRE:
 		/* Generic. */
 		old_state = nst->nst_state;
 		nst->nst_state = npf_generic_fsm[old_state][NPF_FLOW_FORW];
@@ -163,6 +164,7 @@ npf_state_inspect(npf_cache_t *npc, npf_state_t *nst, const bool forw)
 		break;
 	case IPPROTO_UDP:
 	case IPPROTO_ICMP:
+	case IPPROTO_GRE:
 		/* Generic. */
 		old_state = nst->nst_state;
 		nst->nst_state = npf_generic_fsm[old_state][di];
@@ -200,6 +202,10 @@ npf_state_etime(const npf_state_t *nst, const int proto)
 	case IPPROTO_ICMP:
 		/* Generic. */
 		timeout = npf_generic_timeout[state];
+		break;
+	case IPPROTO_GRE:
+		/* don't expire GRE states */
+		timeout = INT_MAX;
 		break;
 	default:
 		KASSERT(false);

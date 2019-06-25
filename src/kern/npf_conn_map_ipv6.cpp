@@ -19,7 +19,7 @@
 #include "likely.h"
 #include "npf_connkey.h"
 #include "npf_conn_map_ipv6.h"
-#include "npf_debug.h"
+#include "npf_print_debug.h"
 
 #define NPF_CONN_MAP_IPV6_SIZE 512 * 4
 

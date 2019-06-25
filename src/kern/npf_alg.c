@@ -112,7 +112,7 @@ npf_alg_construct(npf_t *npf, const char *name)
 	npf_alg_t *alg;
 
 	dprintf("npf_alg_construct()\n");
-	
+
 	npf_config_enter(npf);
 	if ((alg = npf_alg_lookup(npf, name)) == NULL) {
 		char modname[NPF_EXT_PREFLEN + 64];
@@ -168,6 +168,7 @@ npf_alg_register(npf_t *npf, const char *name, const npfa_funcs_t *funcs)
 	afuncs->match = funcs->match;
 	afuncs->translate = funcs->translate;
 	afuncs->inspect = funcs->inspect;
+	afuncs->destroy = funcs->destroy;
 
 	aset->alg_count = MAX(aset->alg_count, i + 1);
 	npf_config_exit(npf);
@@ -230,18 +231,19 @@ npf_alg_match(npf_cache_t *npc, npf_nat_t *nt, int di)
 void
 npf_alg_exec(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 {
-	npf_algset_t *aset = npc->npc_ctx->algset;
 	int s;
+	npf_alg_t *alg;
+	npfa_funcs_t *funcs;
 
 	s = pserialize_read_enter();
-	for (u_int i = 0; i < aset->alg_count; i++) {
-		const npfa_funcs_t *f = &aset->alg_funcs[i];
 
-		if (f->translate) {
-			dprintf("alg number %d translate()\n", i);
-			f->translate(npc, nt, forw);
-		}
+	alg = npf_nat_get_alg(nt);
+	if (alg != NULL) {
+		funcs = npf_alg_get_funcs(npc->npc_ctx, alg);
+		if (funcs->translate != NULL)
+			funcs->translate(npc, nt, forw);
 	}
+
 	pserialize_read_exit(s);
 }
 
@@ -285,4 +287,10 @@ npf_alg_export(npf_t *npf)
 		prop_object_release(algdict);
 	}
 	return alglist;
+}
+
+npfa_funcs_t *
+npf_alg_get_funcs(npf_t *npf, npf_alg_t *alg)
+{
+	return &npf->algset->alg_funcs[alg->na_slot];
 }

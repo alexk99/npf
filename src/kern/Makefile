@@ -12,6 +12,7 @@ CFLAGS+=	-D__RCSID\(x\)=
 CFLAGS+=	-Wno-unused-parameter -Wno-unused-variable -Wno-unused-function
 CFLAGS+=	-Wno-unused
 
+#COMMON_FLAGS = -DNPF_PRINT_DEBUG
 #COMMON_FLAGS = -DALEXK_DEBUG
 #COMMON_FLAGS+= -DALEXK_DEBUG2
 #COMMON_FLAGS+= -DALEXK_DEBUG3
@@ -114,8 +115,9 @@ OBJS=		$(shell grep ^file files.npf | cut -f2 | \
 		    grep -v npf_ext_ | \
 		    grep -v if_npflog)
 
-OBJS+=		npf_alg_icmp.o
+OBJS+=		npf_alg_icmp.o npf_alg_pptp.o
 OBJS+=		stand/bpf_filter.o
+OBJS+=		npf_print_debug.o
 
 OBJS+=		stand/rb.o stand/ptree.o
 OBJS+=		stand/murmurhash.o stand/subr_hash.o
