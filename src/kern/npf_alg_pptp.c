@@ -84,7 +84,7 @@ static npf_portmap_hash_t *alg_pptp_portmap_hash;
 #define PPTP_MAGIC_COOKIE    0x1A2B3C4D
 
 /* Maximum number of GRE connections
- * a single host can establish to the same server
+ * a host can establish to the same server
  */
 #define PPTP_MAX_GRE_PER_CLIENT        4
 
@@ -276,7 +276,7 @@ npfa_pptp_expire_gre_con(npf_t *npf, struct pptp_gre_con *gre_con,
 			  gre_con->orig_client_call_id, gre_con->ctx.client_call_id,
 			  gre_con->ctx.server_call_id, gre_con->flags, client_ip, server_ip);
 
-	/* exit if gre connection wan not established */
+	/* exit if gre connection was not established */
 	if ((gre_con->flags & PPTP_ALG_FL_GRE_STATE_ESTABLISHED) == 0)
 		return;
 
@@ -396,7 +396,6 @@ npfa_pptp_alg_arg_lookup_with_orig_client_call_id(struct pptp_alg_arg *arg,
 	return NULL;
 }
 
-
 /*
  *
  */
@@ -440,7 +439,7 @@ npfa_pptp_tcp_translate(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 	npf_addr_t *o_addr;
 	in_port_t o_port;
 
-	/* only ipv4 supported so far */
+	/* only ipv4 is supported so far */
 	if (!(npf_iscached(npc, NPC_IP4) && npf_iscached(npc, NPC_TCP) &&
 			  (npc->npc_l4.tcp->th_dport == htons(PPTP_SERVER_PORT) ||
 			  npc->npc_l4.tcp->th_sport == htons(PPTP_SERVER_PORT))))
