@@ -1301,13 +1301,8 @@ again:
 			npf_lock_enter(&con->c_lock);
 
 			if ((con->c_flags & CONN_REMOVED) == 0) {
-				npf_conn_t *ret __diagused;
-
-				ret = npf_conndb_remove(cd, fw, key_nwords);
-				KASSERT(ret == con);
-
-				ret = npf_conndb_remove(cd, bk, key_nwords);
-				KASSERT(ret == con);
+				npf_conndb_remove(cd, fw, key_nwords);
+				npf_conndb_remove(cd, bk, key_nwords);
 			}
 
 			/* Flag the removal and expiration. */
