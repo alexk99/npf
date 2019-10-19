@@ -409,3 +409,17 @@ npf_conndb_print_state_summary(npf_conndb_t *cd, npf_print_cb_t print_line_cb,
 		print_line_cb(msg, context);
 	}
 }
+
+__dso_public void
+npf_conndb_set_event_conndb_iter_state(npf_t * npf,
+	npf_nat_event_conndb_iter_state_cb_t cb)
+{
+	npf->npf_nat_event_conndb_iter_state_cb = cb;
+}
+
+__dso_public void
+npf_conndb_set_event_conndb_iter_process_conn(npf_t * npf,
+	npf_nat_event_conndb_iter_process_conn_cb_t cb)
+{
+	npf->npf_nat_event_conndb_iter_process_conn_cb = cb;
+}

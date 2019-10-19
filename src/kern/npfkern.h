@@ -59,6 +59,12 @@ typedef void (*npf_nat_event_destroy_ipv4_session_cb_t) (uint16_t proto,
 		  uint32_t src, uint16_t sport, uint32_t dst, uint16_t dport,
 		  uint32_t tsrc, uint16_t tsport);
 
+#define NPF_CONNDB_ITER_BEGIN	0
+#define NPF_CONNDB_ITER_END	1
+typedef void (*npf_nat_event_conndb_iter_state_cb_t) (uint8_t state);
+typedef void (*npf_nat_event_conndb_iter_process_conn_cb_t) (uint32_t nt_oaddr,
+		u_int proto, u_int state);
+
 typedef struct {
 	struct mbuf *	(*alloc)(int, int);
 	void		(*free)(struct mbuf *);
@@ -122,5 +128,10 @@ void npf_nat_set_event_create_ipv4_session(npf_t * npf,
 	npf_nat_event_create_ipv4_session_cb_t cb);
 void npf_nat_set_event_destroy_ipv4_session(npf_t * npf,
 	npf_nat_event_destroy_ipv4_session_cb_t cb);
+
+void npf_conndb_set_event_conndb_iter_state(npf_t * npf,
+	npf_nat_event_conndb_iter_state_cb_t cb);
+void npf_conndb_set_event_conndb_iter_process_conn(npf_t * npf,
+	npf_nat_event_conndb_iter_process_conn_cb_t cb);
 
 #endif

@@ -221,6 +221,10 @@ struct npf {
 	npf_nat_event_create_ipv4_session_cb_t nat_event_create_ipv4_session_cb;
 	npf_nat_event_destroy_ipv4_session_cb_t nat_event_destroy_ipv4_session_cb;
 	
+	npf_nat_event_conndb_iter_state_cb_t npf_nat_event_conndb_iter_state_cb;
+	npf_nat_event_conndb_iter_process_conn_cb_t
+			  npf_nat_event_conndb_iter_process_conn_cb;
+	
 	/* Associated worker thread. */
 	unsigned		worker_id;
 	void *			worker_entry;

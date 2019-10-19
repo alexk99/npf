@@ -1256,6 +1256,10 @@ again:
 		cd->gc_list = NULL;
 		cd->gc_con = npf_conndb_getlist(cd);
 		cd->gc_state = NPF_GC_STATE_ITERATE;
+
+		if (npf->npf_nat_event_conndb_iter_state_cb != NULL)
+			npf->npf_nat_event_conndb_iter_state_cb(NPF_CONNDB_ITER_BEGIN);
+
 		goto again;
 	}
 	else if (cd->gc_state == NPF_GC_STATE_ITERATE) {
@@ -1274,6 +1278,13 @@ again:
 
 			/* Expired?  Flushing all? */
 			if (!npf_conn_expired(con, tsnow.tv_sec) && !flush) {
+				/* call conndb statistic event handler */
+				if (npf->npf_nat_event_conndb_iter_process_conn_cb != NULL &&
+						  (con->c_flags & CONN_IPV4) && con->c_nat != NULL)
+					npf->npf_nat_event_conndb_iter_process_conn_cb(
+							((struct npf_conn_ipv4 *)con)->nt_oaddr,
+							con->c_proto, con->c_state.nst_state);
+
 				prev = con;
 				con = next;
 				continue;
@@ -1320,6 +1331,9 @@ again:
 			 * next time start the iteration loop from the beginning
 			 */
 			cd->gc_state = NPF_GC_STATE_START;
+
+			if (npf->npf_nat_event_conndb_iter_state_cb != NULL)
+				npf->npf_nat_event_conndb_iter_state_cb(NPF_CONNDB_ITER_END);
 
 			/* GC */
 			npf_conndb_settail(cd, prev);
