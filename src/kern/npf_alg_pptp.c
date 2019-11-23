@@ -91,6 +91,10 @@ static npf_portmap_hash_t *alg_pptp_portmap_hash;
 /* PPTP ALG argument flags */
 #define PPTP_ALG_FL_GRE_STATE_ESTABLISHED 0x1
 #define PPTP_ALG_FL_FREE_ENTRY            0x2
+/* original client call-id has been seen */
+#define PPTP_ALG_FL_ORIGIN_CLIENT_CALL_ID 0x4
+/* server call-id has been seen */
+#define PPTP_ALG_FL_SERVER_CALL_ID        0x8
 
 struct pptp_msg_hdr {
 	uint16_t len;
@@ -195,10 +199,11 @@ npfa_pptp_gre_establish_gre_conn(npf_cache_t *npc, int di,
 
 	NPF_DPRINTFCL(NPF_DC_PPTP_ALG, 50,
 			  "establishing a new pptp gre connection: client call_id %hu, "
-			  "server call_id %hu, orig client call_id %hu\n",
+			  "server call_id %hu, orig client call_id %hu, flags %hu\n",
 			  ntohs(gre_con->ctx.client_call_id),
 			  ntohs(gre_con->ctx.server_call_id),
-			  ntohs(gre_con->orig_client_call_id));
+			  ntohs(gre_con->orig_client_call_id),
+			  gre_con->flags);
 
 	/* establish new gre connection state */
 	con = npf_conn_establish(npc, di, true);
@@ -420,7 +425,8 @@ npfa_pptp_gre_slot_lookup_and_use(npf_cache_t *npc,
 			/* empty slot */
 			empty_slot = slot;
 		}
-		else if (slot->orig_client_call_id == client_call_id) {
+		else if (slot->orig_client_call_id == client_call_id &&
+				  (slot->flags & PPTP_ALG_FL_ORIGIN_CLIENT_CALL_ID)) {
 			reuse_slot = true;
 			old_reused_slot.u64 = slot->u64;
 			break;
@@ -434,8 +440,7 @@ npfa_pptp_gre_slot_lookup_and_use(npf_cache_t *npc,
 
 		new_slot.orig_client_call_id = client_call_id;
 		new_slot.ctx.client_call_id = trans_client_call_id;
-		new_slot.ctx.server_call_id = 0;
-		new_slot.flags = 0;
+		new_slot.flags = PPTP_ALG_FL_ORIGIN_CLIENT_CALL_ID;
 
 		slot->u64 = new_slot.u64;
 	}
@@ -466,7 +471,8 @@ npfa_pptp_gre_slot_lookup_with_server_call_id(struct pptp_alg_arg *arg,
 		gre_con = &arg->gre_con_slots[i];
 
 		if ((gre_con->flags & PPTP_ALG_FL_FREE_ENTRY) == 0 &&
-				  gre_con->ctx.server_call_id == server_call_id)
+				  gre_con->ctx.server_call_id == server_call_id &&
+				  (gre_con->flags & PPTP_ALG_FL_SERVER_CALL_ID))
 			return gre_con;
 	}
 
@@ -591,20 +597,22 @@ npfa_pptp_tcp_translate(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 		gre_slot = npfa_pptp_gre_slot_lookup_with_client_call_id(gre_conns,
 				  pptp_call_reply->peer_call_id);
 		/* slot is not found or call reply message has been already received */
-		if (gre_slot == NULL || gre_slot->ctx.server_call_id != 0) {
+		if (gre_slot == NULL || (gre_slot->flags & PPTP_ALG_FL_SERVER_CALL_ID)) {
 			npfa_pptp_tcp_conn_unlock(gre_conns);
 			return false;
 		}
 
 		/* save server call id */
 		gre_slot->ctx.server_call_id = pptp_call_reply->hdr.call_id;
+		gre_slot->flags |= PPTP_ALG_FL_SERVER_CALL_ID;
 
 		/* if client and server call ids have been seen,
 		 * create new gre connection state entry
 		 */
 		if (gre_slot->ctx.client_call_id != 0 &&
-				  gre_slot->ctx.server_call_id != 0 &&
-				  gre_slot->orig_client_call_id != 0) {
+			 (gre_slot->flags &
+				  (PPTP_ALG_FL_ORIGIN_CLIENT_CALL_ID |
+				   PPTP_ALG_FL_SERVER_CALL_ID))) {
 			/* create pptp gre context cache */
 			memcpy(&gre_npc, npc, sizeof(npf_cache_t));
 			gre_npc.npc_proto = IPPROTO_GRE;
