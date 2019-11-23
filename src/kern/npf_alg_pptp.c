@@ -196,8 +196,9 @@ npfa_pptp_gre_establish_gre_conn(npf_cache_t *npc, int di,
 	NPF_DPRINTFCL(NPF_DC_PPTP_ALG, 50,
 			  "establishing a new pptp gre connection: client call_id %hu, "
 			  "server call_id %hu, orig client call_id %hu\n",
-			  gre_con->ctx.client_call_id, gre_con->ctx.server_call_id,
-			  gre_con->orig_client_call_id);
+			  ntohs(gre_con->ctx.client_call_id),
+			  ntohs(gre_con->ctx.server_call_id),
+			  ntohs(gre_con->orig_client_call_id));
 
 	/* establish new gre connection state */
 	con = npf_conn_establish(npc, di, true);
@@ -269,7 +270,7 @@ npfa_translated_call_id_put(uint32_t ip, uint16_t call_id)
 
 	NPF_DPRINTFCL(NPF_DC_PPTP_ALG, 50,
 			  "pptp alg: put call_id %hu to "
-			  "the pormap ip %u\n", call_id, ip);
+			  "the pormap ip %u\n", ntohs(call_id), ip);
 }
 
 /*
@@ -282,8 +283,10 @@ npfa_pptp_gre_con_free(npf_t *npf, struct pptp_gre_slot *gre_slot,
 	NPF_DPRINTFCL(NPF_DC_PPTP_ALG, 50,
 			  "expire gre con: orig client call_id %hu, client call_id %hu, "
 			  "server call_id %hu, flags %hu, cl %u, srv %u\n",
-			  gre_slot->orig_client_call_id, gre_slot->ctx.client_call_id,
-			  gre_slot->ctx.server_call_id, gre_slot->flags, client_ip, server_ip);
+			  ntohs(gre_slot->orig_client_call_id),
+			  ntohs(gre_slot->ctx.client_call_id),
+			  ntohs(gre_slot->ctx.server_call_id),
+			  gre_slot->flags, client_ip, server_ip);
 
 	/* expire the gre connection associated with the slot */
 	if (gre_slot->flags & PPTP_ALG_FL_GRE_STATE_ESTABLISHED) {
@@ -307,12 +310,12 @@ npfa_pptp_gre_con_free(npf_t *npf, struct pptp_gre_slot *gre_slot,
 
 			NPF_DPRINTFCL(NPF_DC_PPTP_ALG, 50,
 				  "pptp control connection: expire associated gre conn "
-				  "server call_id %hu\n", gre_slot->ctx.server_call_id);
+				  "server call_id %hu\n", ntohs(gre_slot->ctx.server_call_id));
 		}
 		else {
 			NPF_DPRINTFCL(NPF_DC_PPTP_ALG, 50,
 				  "pptp control connection: associated gre conn not found, "
-				  "server call_id %hu\n", gre_slot->ctx.server_call_id);
+				  "server call_id %hu\n", ntohs(gre_slot->ctx.server_call_id));
 		}
 
 		gre_slot->flags &= ~PPTP_ALG_FL_GRE_STATE_ESTABLISHED;
@@ -762,7 +765,7 @@ npfa_pptp_gre_translate(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 	KASSERT(gre->call_id == gre_con.ctx.client_call_id);
 	NPF_DPRINTFCL(NPF_DC_PPTP_ALG, 60,
 			  "gre call id translated %hu -> %hu, forw %d\n",
-			  gre->call_id, gre_con.orig_client_call_id, forw);
+			  ntohs(gre->call_id), ntohs(gre_con.orig_client_call_id), forw);
 
 	gre->call_id = gre_con.orig_client_call_id;
 	return true;
