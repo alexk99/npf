@@ -90,11 +90,9 @@ static npf_portmap_hash_t *alg_pptp_portmap_hash;
 
 /* PPTP ALG argument flags */
 #define PPTP_ALG_FL_GRE_STATE_ESTABLISHED 0x1
-#define PPTP_ALG_FL_FREE_ENTRY            0x2
-/* original client call-id has been seen */
-#define PPTP_ALG_FL_ORIGIN_CLIENT_CALL_ID 0x4
+#define PPTP_ALG_FL_ENTRY_IN_USE          0x2
 /* server call-id has been seen */
-#define PPTP_ALG_FL_SERVER_CALL_ID        0x8
+#define PPTP_ALG_FL_SERVER_CALL_ID        0x4
 
 struct pptp_msg_hdr {
 	uint16_t len;
@@ -128,8 +126,8 @@ struct pptp_outgoing_call_reply {
 __packed;
 
 #define PPTP_MIN_MSG_SIZE (MIN(\
-	sizeof(pptp_outgoing_call_req_t) - sizeof(pptp_msg_hdr_t), \
-	sizeof(pptp_outgoing_call_reply_t) - sizeof(pptp_msg_hdr_t)))
+	sizeof(struct pptp_outgoing_call_req) - sizeof(struct pptp_msg_hdr), \
+	sizeof(struct pptp_outgoing_call_reply) - sizeof(struct pptp_msg_hdr)))
 
 /*
  * pptp gre connection
@@ -283,7 +281,7 @@ npfa_translated_call_id_put(uint32_t ip, uint16_t call_id)
 
 	NPF_DPRINTFCL(NPF_DC_PPTP_ALG, 50,
 			  "pptp alg: put call_id %hu to "
-			  "the pormap ip %u\n", ntohs(call_id), ip);
+			  "the pormap ip %u\n", call_id, ip);
 }
 
 /*
@@ -339,7 +337,7 @@ npfa_pptp_gre_con_free(npf_t *npf, struct pptp_gre_slot *gre_slot,
 	}
 
 	/* free gre slot in the parent tcp connection nat arg */
-	gre_slot->flags |= PPTP_ALG_FL_FREE_ENTRY;
+	gre_slot->flags &= ~PPTP_ALG_FL_ENTRY_IN_USE;
 
 	return;
 }
@@ -357,10 +355,6 @@ npfa_pptp_alg_arg_init(void)
 	alg_arg = kmem_intr_zalloc(sizeof(struct pptp_alg_arg), KM_SLEEP);
 	if (alg_arg == NULL)
 		return NULL;
-
-	/* mark all entries as empty */
-	for (i = 0; i < PPTP_MAX_GRE_PER_CLIENT; i++)
-		alg_arg->gre_con_slots[i].flags = PPTP_ALG_FL_FREE_ENTRY;
 
 	mutex_init(&alg_arg->lock, MUTEX_DEFAULT, IPL_SOFTNET);
 
@@ -429,12 +423,11 @@ npfa_pptp_gre_slot_lookup_and_use(npf_cache_t *npc,
 		/* if call_id is already in use by a slot, then
 		 * expire associated GRE connection and reuse the slot
 		 */
-		if (slot->flags & PPTP_ALG_FL_FREE_ENTRY) {
+		if ((slot->flags & PPTP_ALG_FL_ENTRY_IN_USE) == 0) {
 			/* empty slot */
 			empty_slot = slot;
 		}
-		else if (slot->orig_client_call_id == client_call_id &&
-				  (slot->flags & PPTP_ALG_FL_ORIGIN_CLIENT_CALL_ID)) {
+		else if (slot->orig_client_call_id == client_call_id) {
 			reuse_slot = true;
 			old_reused_slot.u64 = slot->u64;
 			break;
@@ -448,7 +441,7 @@ npfa_pptp_gre_slot_lookup_and_use(npf_cache_t *npc,
 
 		new_slot.orig_client_call_id = client_call_id;
 		new_slot.ctx.client_call_id = trans_client_call_id;
-		new_slot.flags = PPTP_ALG_FL_ORIGIN_CLIENT_CALL_ID;
+		new_slot.flags = PPTP_ALG_FL_ENTRY_IN_USE;
 
 		slot->u64 = new_slot.u64;
 	}
@@ -478,9 +471,10 @@ npfa_pptp_gre_slot_lookup_with_server_call_id(struct pptp_alg_arg *arg,
 	for (i = 0; i < PPTP_MAX_GRE_PER_CLIENT; i++) {
 		gre_con = &arg->gre_con_slots[i];
 
-		if ((gre_con->flags & PPTP_ALG_FL_FREE_ENTRY) == 0 &&
-				  gre_con->ctx.server_call_id == server_call_id &&
-				  (gre_con->flags & PPTP_ALG_FL_SERVER_CALL_ID))
+		if ((gre_con->flags &
+				  (PPTP_ALG_FL_ENTRY_IN_USE | PPTP_ALG_FL_SERVER_CALL_ID)) ==
+				  (PPTP_ALG_FL_ENTRY_IN_USE | PPTP_ALG_FL_SERVER_CALL_ID) &&
+				  gre_con->ctx.server_call_id == server_call_id)
 			return gre_con;
 	}
 
@@ -500,7 +494,7 @@ npfa_pptp_gre_slot_lookup_with_client_call_id(struct pptp_alg_arg *arg,
 	for (i = 0; i < PPTP_MAX_GRE_PER_CLIENT; i++) {
 		gre_con = &arg->gre_con_slots[i];
 
-		if ((gre_con->flags & PPTP_ALG_FL_FREE_ENTRY) == 0 &&
+		if ((gre_con->flags & PPTP_ALG_FL_ENTRY_IN_USE) != 0 &&
 				  gre_con->ctx.client_call_id == client_call_id)
 			return gre_con;
 	}
@@ -605,7 +599,8 @@ npfa_pptp_tcp_translate(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 		gre_slot = npfa_pptp_gre_slot_lookup_with_client_call_id(gre_conns,
 				  pptp_call_reply->peer_call_id);
 		/* slot is not found or call reply message has been already received */
-		if (gre_slot == NULL || (gre_slot->flags & PPTP_ALG_FL_SERVER_CALL_ID)) {
+		if (gre_slot == NULL ||
+		    (gre_slot->flags & PPTP_ALG_FL_SERVER_CALL_ID) != 0) {
 			npfa_pptp_tcp_conn_unlock(gre_conns);
 			return false;
 		}
@@ -614,25 +609,22 @@ npfa_pptp_tcp_translate(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 		gre_slot->ctx.server_call_id = pptp_call_reply->hdr.call_id;
 		gre_slot->flags |= PPTP_ALG_FL_SERVER_CALL_ID;
 
-		/* if client and server call ids have been seen,
+		/*
+		 * Client and server call ids have been seen,
 		 * create new gre connection state entry
 		 */
-		if (gre_slot->ctx.client_call_id != 0 &&
-			 (gre_slot->flags &
-				  (PPTP_ALG_FL_ORIGIN_CLIENT_CALL_ID |
-				   PPTP_ALG_FL_SERVER_CALL_ID))) {
-			/* create pptp gre context cache */
-			memcpy(&gre_npc, npc, sizeof(npf_cache_t));
-			gre_npc.npc_proto = IPPROTO_GRE;
-			gre_npc.npc_info = NPC_IP46 | NPC_LAYER4 | NPC_ALG_PPTP_GRE_CTX;
-			gre_npc.npc_l4.hdr = (void *)&gre_slot->ctx;
-			/* setup ip addresses */
-			npf_nat_getorig(nt, &o_addr, &o_port);
-			gre_npc.npc_ips[NPF_SRC] = o_addr;
-			gre_npc.npc_ips[NPF_DST] = npc->npc_ips[NPF_SRC];
-			/* establish gre connection state and associate nat */
-			npfa_pptp_gre_establish_gre_conn(&gre_npc, PFIL_OUT, gre_slot, nt);
-		}
+
+		/* create pptp gre context cache */
+		memcpy(&gre_npc, npc, sizeof(npf_cache_t));
+		gre_npc.npc_proto = IPPROTO_GRE;
+		gre_npc.npc_info = NPC_IP46 | NPC_LAYER4 | NPC_ALG_PPTP_GRE_CTX;
+		gre_npc.npc_l4.hdr = (void *)&gre_slot->ctx;
+		/* setup ip addresses */
+		npf_nat_getorig(nt, &o_addr, &o_port);
+		gre_npc.npc_ips[NPF_SRC] = o_addr;
+		gre_npc.npc_ips[NPF_DST] = npc->npc_ips[NPF_SRC];
+		/* establish gre connection state and associate nat */
+		npfa_pptp_gre_establish_gre_conn(&gre_npc, PFIL_OUT, gre_slot, nt);
 
 		orig_client_call_id = gre_slot->orig_client_call_id;
 		npfa_pptp_tcp_conn_unlock(gre_conns);
@@ -724,7 +716,7 @@ npfa_pptp_tcp_destroy(npf_t *npf, npf_conn_t *con)
 
 	for (i = 0; i < PPTP_MAX_GRE_PER_CLIENT; i++) {
 		gre_con = &alg_arg->gre_con_slots[i];
-		if ((gre_con->flags & PPTP_ALG_FL_FREE_ENTRY) == 0)
+		if ((gre_con->flags & PPTP_ALG_FL_ENTRY_IN_USE) != 0)
 			npfa_pptp_gre_con_free(npf, gre_con, client_ip, server_ip);
 	}
 
