@@ -127,6 +127,10 @@ struct pptp_outgoing_call_reply {
 }
 __packed;
 
+#define PPTP_MIN_MSG_SIZE (MIN(\
+	sizeof(pptp_outgoing_call_req_t) - sizeof(pptp_msg_hdr_t), \
+	sizeof(pptp_outgoing_call_reply_t) - sizeof(pptp_msg_hdr_t)))
+
 /*
  * pptp gre connection
  */
@@ -233,8 +237,11 @@ npfa_pptp_gre_establish_gre_conn(npf_cache_t *npc, int di,
 	 * Associate created nat entry with the gre connection.
 	 */
 	ret = npf_nat_share_policy(npc, con, pptp_tcp_nt);
-	if (ret)
+	if (ret) {
+		npf_conn_expire(con);
+		npf_conn_release(con);
 		return ret;
+	}
 
 	/* associate GRE ALG with the gre connection */
 	npf_nat_setalg(con->c_nat, alg_pptp_gre, (uintptr_t)gre_con->u64);
@@ -243,7 +250,8 @@ npfa_pptp_gre_establish_gre_conn(npf_cache_t *npc, int di,
 			  "new pptp gre connection's nat %p\n", con->c_nat);
 
 	/* make gre connection active and pass */
-	atomic_or_uint(&con->c_flags, CONN_ACTIVE | CONN_PASS);
+	npf_conn_setpass(con, NULL);
+	npf_conn_release(con);
 
 	gre_con->flags |= PPTP_ALG_FL_GRE_STATE_ESTABLISHED;
 	return 0;
@@ -535,7 +543,7 @@ npfa_pptp_tcp_translate(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 	nbuf_reset(nbuf);
 
 	pptp = nbuf_advance(nbuf, npc->npc_hlen + tcp_hdr_size,
-			  sizeof(struct pptp_msg_hdr));
+			  sizeof(struct pptp_msg_hdr) + PPTP_MIN_MSG_SIZE);
 	if (pptp == NULL)
 		return false;
 
