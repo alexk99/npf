@@ -62,6 +62,7 @@ static u_int npf_generic_timeout[] __read_mostly = {
 	[NPF_ANY_CONN_CLOSED]		= 0,
 	[NPF_ANY_CONN_NEW]		= 30,
 	[NPF_ANY_CONN_ESTABLISHED]	= 60,
+	[NPF_CONN_GRE]	= 60 * 60 * 1,
 };
 
 /*
@@ -205,7 +206,7 @@ npf_state_etime(const npf_state_t *nst, const int proto)
 		break;
 	case IPPROTO_GRE:
 		/* don't expire GRE states */
-		timeout = INT_MAX;
+		timeout = npf_generic_timeout[NPF_CONN_GRE];
 		break;
 	default:
 		KASSERT(false);

@@ -407,6 +407,8 @@ typedef enum {
 #define	NPF_ANY_CONN_ESTABLISHED	2
 #define	NPF_ANY_CONN_NSTATES		3
 
+#define	NPF_CONN_GRE	3
+
 /*
  * NPF TCP states.  Note: these states are different from the TCP FSM
  * states of RFC 793.  The packet filter is a man-in-the-middle.
