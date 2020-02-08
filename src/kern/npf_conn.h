@@ -165,7 +165,7 @@ typedef int (*npf_print_cb_t) (const char* msg, void* context);
 #define NPF_GC_STATE_ITERATE	2
 
 /* max number of connection GC can check at once */
-#define NPF_GC_MAX_ITER		50000
+#define NPF_GC_MAX_ITER		5000
 
 /* */
 #define NPF_CONN_INSPECT_OK	0
