@@ -161,6 +161,8 @@ npf_create(int flags, const npf_mbufops_t *mbufops, const npf_ifops_t *ifops,
 	/* Load an empty configuration. */
 	npf_config_init(npf);
 
+	TAILQ_INIT(&npf->old_configs);
+
 	return npf;
 }
 
@@ -212,6 +214,9 @@ npf_gc(npf_t *npf, uint8_t cpu_thread)
 	npf_conn_worker(npf, &npc);
 	pserialize_perform(npf->qsbr);
 	npf_portmap_gc(npf->nat_portmap_hash);
+
+	/* destroy old configs */
+	npf_config_gc(npf);
 }
 
 __dso_public void

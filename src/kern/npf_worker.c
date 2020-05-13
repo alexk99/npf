@@ -111,7 +111,12 @@ void
 npf_worker_signal(npf_t *npf)
 {
 	const unsigned idx = npf->worker_id;
-	npf_worker_t *wrk = &npf_workers[idx];
+	npf_worker_t *wrk;
+
+	if (npf_worker_count == 0)
+		return;
+
+	wrk = &npf_workers[idx];
 
 	mutex_enter(&wrk->worker_lock);
 	cv_signal(&wrk->worker_cv);

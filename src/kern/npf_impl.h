@@ -235,6 +235,9 @@ struct npf {
 
 	/* Statistics size (num threads) */
 	uint16_t		stats_percpu_size;
+
+	/* list of old configs to destroy */
+	TAILQ_HEAD(, npf_config)	old_configs;
 };
 
 /*
@@ -244,6 +247,7 @@ struct npf {
 /* NPF config, statistics, etc. */
 void		npf_config_init(npf_t *);
 void		npf_config_fini(npf_t *);
+void		npf_config_gc(npf_t *);
 
 void		npf_config_enter(npf_t *);
 void		npf_config_exit(npf_t *);
@@ -359,6 +363,8 @@ int		npf_table_flush(npf_table_t *);
 
 /* Ruleset interface. */
 npf_ruleset_t *	npf_ruleset_create(size_t);
+void		npf_ruleset_expire(npf_ruleset_t *rlset);
+bool		npf_ruleset_in_use(npf_ruleset_t *rlset);
 void		npf_ruleset_destroy(npf_ruleset_t *);
 void		npf_ruleset_insert(npf_ruleset_t *, npf_rule_t *);
 void		npf_ruleset_reload(npf_t *, npf_ruleset_t *,
@@ -419,6 +425,8 @@ void		npf_nat_sysinit(void);
 void		npf_nat_sysfini(void);
 npf_natpolicy_t *npf_nat_newpolicy(npf_t *, prop_dictionary_t, npf_ruleset_t *);
 int		npf_nat_policyexport(const npf_natpolicy_t *, prop_dictionary_t);
+void		npf_nat_expire_policy(npf_natpolicy_t *np);
+bool		npf_nat_in_use(npf_natpolicy_t *np);
 void		npf_nat_freepolicy(npf_natpolicy_t *);
 bool		npf_nat_cmppolicy(npf_natpolicy_t *, npf_natpolicy_t *);
 bool		npf_nat_sharepm(npf_natpolicy_t *, npf_natpolicy_t *);

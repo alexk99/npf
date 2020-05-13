@@ -69,6 +69,7 @@ struct npf_config {
 	npf_ruleset_t *		n_nat_rules;
 	npf_rprocset_t *	n_rprocs;
 	bool			n_default_pass;
+	TAILQ_ENTRY(npf_config) list_entry;
 };
 
 void
@@ -90,6 +91,13 @@ npf_config_init(npf_t *npf)
 }
 
 static void
+npf_config_expire(npf_config_t *nc)
+{
+	npf_ruleset_expire(nc->n_rules);
+	npf_ruleset_expire(nc->n_nat_rules);
+}
+
+static void
 npf_config_destroy(npf_config_t *nc)
 {
 	npf_ruleset_destroy(nc->n_rules);
@@ -97,6 +105,26 @@ npf_config_destroy(npf_config_t *nc)
 	npf_rprocset_destroy(nc->n_rprocs);
 	npf_tableset_destroy(nc->n_tables);
 	kmem_free(nc, sizeof(npf_config_t));
+}
+
+void
+npf_config_gc(npf_t *npf)
+{
+	npf_config_t *nc, *next_nc;
+
+	for (nc = TAILQ_FIRST(&npf->old_configs); nc != NULL; nc = next_nc) {
+		/* exit if the old config is still in use by workers. */
+		if (npf_ruleset_in_use(nc->n_rules) ||
+				  npf_ruleset_in_use(nc->n_nat_rules))
+			return;
+
+		next_nc = TAILQ_NEXT(nc, list_entry);
+		TAILQ_REMOVE(&npf->old_configs, nc, list_entry);
+
+		/* Finally, it is safe to destroy the old config. */
+		printf("destroy old config\n");
+		npf_config_destroy(nc);
+	}
 }
 
 void
@@ -182,8 +210,13 @@ npf_config_load(npf_t *npf, npf_ruleset_t *rset, npf_tableset_t *tset,
 	npf_conn_load(npf, conns, !flush);
 	mutex_exit(&npf->config_lock);
 
-	/* Finally, it is safe to destroy the old config. */
-	npf_config_destroy(onc);
+	/* expire old config */
+	printf("expire old config\n");
+	npf_config_expire(onc);
+
+	/* put the old config to g/c list */
+	printf("put old config to gc\n");
+	TAILQ_INSERT_TAIL(&npf->old_configs, onc, list_entry);
 }
 
 /*

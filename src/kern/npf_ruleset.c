@@ -152,6 +152,56 @@ npf_ruleset_create(size_t slots)
 	return rlset;
 }
 
+static bool
+npf_rule_in_use(npf_rule_t *rl)
+{
+	npf_natpolicy_t *np = rl->r_natp;
+
+	if (np && (rl->r_attr & NPF_RULE_KEEPNAT) == 0)
+		return npf_nat_in_use(np);
+	else
+		return false;
+}
+
+
+bool
+npf_ruleset_in_use(npf_ruleset_t *rlset)
+{
+	npf_rule_t *rl;
+
+	LIST_FOREACH(rl, &rlset->rs_all, r_aentry)
+		if (npf_rule_in_use(rl))
+			return true;
+
+	LIST_FOREACH(rl, &rlset->rs_gc, r_aentry)
+		if (npf_rule_in_use(rl))
+			return true;
+
+	return false;
+}
+
+void
+npf_ruleset_expire(npf_ruleset_t *rlset)
+{
+	npf_rule_t *rl;
+
+	if (rlset != NULL) {
+		npf_natpolicy_t *np;
+
+		LIST_FOREACH(rl, &rlset->rs_all, r_aentry) {
+			np = rl->r_natp;
+			if (np && (rl->r_attr & NPF_RULE_KEEPNAT) == 0)
+				npf_nat_expire_policy(np);
+		}
+
+		LIST_FOREACH(rl, &rlset->rs_gc, r_aentry) {
+			np = rl->r_natp;
+			if (np && (rl->r_attr & NPF_RULE_KEEPNAT) == 0)
+				npf_nat_expire_policy(np);
+		}
+	}
+}
+
 void
 npf_ruleset_destroy(npf_ruleset_t *rlset)
 {

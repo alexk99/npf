@@ -272,6 +272,32 @@ npf_nat_policyexport(const npf_natpolicy_t *np, prop_dictionary_t natdict)
 }
 
 /*
+ * npf_nat_expire_policy: expire nat connections that use a policy
+ */
+void
+npf_nat_expire_policy(npf_natpolicy_t *np)
+{
+	npf_conn_t *con;
+	npf_nat_t *nt;
+
+	npf_lock_enter(&np->n_lock);
+
+	LIST_FOREACH(nt, &np->n_nat_list, nt_entry) {
+		con = nt->nt_conn;
+		KASSERT(con != NULL);
+		npf_conn_expire(con);
+	}
+
+	npf_lock_exit(&np->n_lock);
+}
+
+bool
+npf_nat_in_use(npf_natpolicy_t *np)
+{
+	return np->n_refcnt > 0;
+}
+
+/*
  * npf_nat_freepolicy: free NAT policy and, on last reference, free portmap.
  *
  * => Called from npf_rule_free() during the reload via npf_ruleset_destroy().
@@ -279,22 +305,13 @@ npf_nat_policyexport(const npf_natpolicy_t *np, prop_dictionary_t natdict)
 void
 npf_nat_freepolicy(npf_natpolicy_t *np)
 {
-	npf_conn_t *con;
-	npf_nat_t *nt;
-
 	/*
 	 * Disassociate all entries from the policy.  At this point,
 	 * new entries can no longer be created for this policy.
 	 */
 	while (np->n_refcnt) {
-		npf_lock_enter(&np->n_lock);
-
-		LIST_FOREACH(nt, &np->n_nat_list, nt_entry) {
-			con = nt->nt_conn;
-			KASSERT(con != NULL);
-			npf_conn_expire(con);
-		}
-		npf_lock_exit(&np->n_lock);
+		/* expire policy connections */
+		npf_nat_expire_policy(np);
 
 		/* Kick the worker - all references should be going away. */
 		npf_worker_signal(np->n_npfctx);
