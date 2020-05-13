@@ -113,38 +113,17 @@ npf_ifmap_lookup(npf_t *npf, const char *ifname)
 u_int
 npf_ifmap_register(npf_t *npf, const char *ifname)
 {
+	u_int ret;
 	ifnet_t *ifp;
-	if ((ifp = npf->ifops->lookup(ifname)) != NULL) {
-		u_int idx = npf_ifmap_getid(npf, ifp);
-		dprintf("npf_ifmap_register: %s idx %u\n", ifname, idx);
-		return idx;
-	}
 
-	return 0;
+	npf_config_enter(npf);
+	if ((ifp = npf->ifops->lookup(ifname)) != NULL)
+		ret = npf_ifmap_getid(npf, ifp);
+	else
+		ret = 0;
+	npf_config_exit(npf);
 
-
-//	npf_ifmap_t *nim;
-//	ifnet_t *ifp;
-//	u_int i;
-//
-//	npf_config_enter(npf);
-//	if ((i = npf_ifmap_lookup(npf, ifname)) != 0) {
-//		goto out;
-//	}
-//	if ((i = npf_ifmap_new(npf)) == 0) {
-//		goto out;
-//	}
-//	nim = &npf->ifmap[i - 1];
-//	strlcpy(nim->n_ifname, ifname, IFNAMSIZ);
-//
-//	if ((ifp = npf->ifops->lookup(ifname)) != NULL) {
-//		npf->ifops->setmeta(ifp, (void *)(uintptr_t)i);
-//	}
-//out:
-//	npf_config_exit(npf);
-//
-//	printf("npf_ifmap_register: %s, %d\n", ifname, i);
-//	return i;
+	return ret;
 }
 
 void
