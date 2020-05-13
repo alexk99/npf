@@ -122,7 +122,6 @@ npf_config_gc(npf_t *npf)
 		TAILQ_REMOVE(&npf->old_configs, nc, list_entry);
 
 		/* Finally, it is safe to destroy the old config. */
-		printf("destroy old config\n");
 		npf_config_destroy(nc);
 	}
 }
@@ -211,11 +210,9 @@ npf_config_load(npf_t *npf, npf_ruleset_t *rset, npf_tableset_t *tset,
 	mutex_exit(&npf->config_lock);
 
 	/* expire old config */
-	printf("expire old config\n");
 	npf_config_expire(onc);
 
 	/* put the old config to g/c list */
-	printf("put old config to gc\n");
 	TAILQ_INSERT_TAIL(&npf->old_configs, onc, list_entry);
 }
 
