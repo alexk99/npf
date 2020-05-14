@@ -419,7 +419,7 @@ void		npf_nat_sysinit(void);
 void		npf_nat_sysfini(void);
 npf_natpolicy_t *npf_nat_newpolicy(npf_t *, prop_dictionary_t, npf_ruleset_t *);
 int		npf_nat_policyexport(const npf_natpolicy_t *, prop_dictionary_t);
-void		npf_nat_freepolicy(npf_natpolicy_t *);
+void		npf_natpolicy_destroy(npf_natpolicy_t *);
 bool		npf_nat_cmppolicy(npf_natpolicy_t *, npf_natpolicy_t *);
 bool		npf_nat_sharepm(npf_natpolicy_t *, npf_natpolicy_t *);
 void		npf_nat_setid(npf_natpolicy_t *, uint64_t);

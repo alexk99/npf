@@ -572,7 +572,7 @@ npf_ruleset_reload(npf_t *npf, npf_ruleset_t *newset,
 		 * kept active for now).  Destroy the new/unused policy.
 		 */
 		actrl->r_attr |= NPF_RULE_KEEPNAT;
-		npf_nat_freepolicy(np);
+		npf_natpolicy_destroy(np);
 	}
 
 	/* Inherit the ID counter. */
@@ -748,7 +748,7 @@ npf_rule_free(npf_rule_t *rl)
 
 	if (np && (rl->r_attr & NPF_RULE_KEEPNAT) == 0) {
 		/* Free NAT policy. */
-		npf_nat_freepolicy(np);
+		npf_natpolicy_destroy(np);
 	}
 	if (rp) {
 		/* Release rule procedure. */

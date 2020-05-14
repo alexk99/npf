@@ -200,6 +200,7 @@ npf_nat_newpolicy(npf_t *npf, prop_dictionary_t natdict, npf_ruleset_t *rset)
 	prop_object_t obj;
 
 	np = kmem_zalloc(sizeof (npf_natpolicy_t), KM_SLEEP);
+	np->n_refcnt = 1;
 	np->n_npfctx = npf;
 
 	/* The translation type, flags and policy ID. */
@@ -271,13 +272,25 @@ npf_nat_policyexport(const npf_natpolicy_t *np, prop_dictionary_t natdict)
 	return 0;
 }
 
+static void
+npf_natpolicy_release(npf_natpolicy_t *np)
+{
+	KASSERT(np->n_refcnt > 0);
+
+	if (atomic_dec_uint_nv(&np->n_refcnt) == 0) {
+		KASSERT(LIST_EMPTY(&np->n_nat_list));
+		npf_lock_destroy(&np->n_lock);
+		kmem_free(np, sizeof(npf_natpolicy_t));
+	}
+}
+
 /*
- * npf_nat_freepolicy: free NAT policy and, on last reference, free portmap.
+ * npf_natpolicy_destroy: free NAT policy and, on last reference, free portmap.
  *
  * => Called from npf_rule_free() during the reload via npf_ruleset_destroy().
  */
 void
-npf_nat_freepolicy(npf_natpolicy_t *np)
+npf_natpolicy_destroy(npf_natpolicy_t *np)
 {
 	npf_conn_t *con;
 	npf_nat_t *nt;
@@ -286,7 +299,7 @@ npf_nat_freepolicy(npf_natpolicy_t *np)
 	 * Disassociate all entries from the policy.  At this point,
 	 * new entries can no longer be created for this policy.
 	 */
-	while (np->n_refcnt) {
+	if (np->n_refcnt > 1) {
 		npf_lock_enter(&np->n_lock);
 
 		LIST_FOREACH(nt, &np->n_nat_list, nt_entry) {
@@ -300,10 +313,16 @@ npf_nat_freepolicy(npf_natpolicy_t *np)
 		npf_worker_signal(np->n_npfctx);
 		kpause("npfgcnat", false, 1, NULL);
 	}
-	KASSERT(LIST_EMPTY(&np->n_nat_list));
 
-	npf_lock_destroy(&np->n_lock);
-	kmem_free(np, sizeof (npf_natpolicy_t));
+	KASSERT(np->n_refcnt >= 1);
+
+	/*
+	 * Drop the initial reference, but it might not be the last one.
+	 * If so, the last reference will be triggered via:
+	 *
+	 * npf_conn_destroy() -> npf_nat_destroy() -> npf_natpolicy_release()
+	 */
+	npf_natpolicy_release(np);
 }
 
 int npf_nat_type(npf_nat_t *nat)
@@ -830,9 +849,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 			npf_recache(npc);
 		}
 		error = npf_nat_algo(npc, np, forw);
-		atomic_dec_uint(&np->n_refcnt);
-
-		dprintf("nat err1\n");
+		npf_natpolicy_release(np);
 		return error;
 	}
 
@@ -845,7 +862,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	if (unlikely(con == NULL)) {
 		ncon = npf_conn_establish(npc, di, true);
 		if (ncon == NULL) {
-			atomic_dec_uint(&np->n_refcnt);
+			npf_natpolicy_release(np);
 			dprintf("npf_conn_establish() failed\n");
 			return ENOMEM;
 		}
@@ -858,8 +875,7 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	 */
 	nt = npf_nat_create(npc, np, con);
 	if (unlikely(nt == NULL)) {
-		atomic_dec_uint(&np->n_refcnt);
-		dprintf("nat err3\n");
+		npf_natpolicy_release(np);
 		error = ENOMEM;
 		goto out;
 	}
@@ -1000,9 +1016,9 @@ npf_nat_destroy(npf_cache_t* npc, npf_t *npf, npf_nat_t *nt)
 
 	npf_lock_enter(&np->n_lock);
 	LIST_REMOVE(nt, nt_entry);
-	KASSERT(np->n_refcnt > 0);
-	atomic_dec_uint(&np->n_refcnt);
 	npf_lock_exit(&np->n_lock);
+	npf_natpolicy_release(np);
+
 	pool_cache_put(nat_cache, nt);
 }
 
