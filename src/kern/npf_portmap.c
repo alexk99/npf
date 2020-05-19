@@ -95,73 +95,69 @@ typedef struct bitmap {
 	unsigned		addr_len;
 } bitmap_t;
 
+#define	NPF_PORTMAP_MINPORT	1024
+#define	NPF_PORTMAP_MAXPORT	65535
+
 struct npf_portmap {
 	thmap_t	*		addr_map;
 	LIST_HEAD(, bitmap)	bitmap_list;
 	kmutex_t		list_lock;
+	int			min_port;
+	int			max_port;
 };
-
-npf_portmap_t *
-npf_portmap_init_pm(void)
-{
-	npf_portmap_t *pm;
-
-	pm = kmem_zalloc(sizeof(npf_portmap_t), KM_SLEEP);
-	if (pm == NULL)
-		return NULL;
-	mutex_init(&pm->list_lock, MUTEX_DEFAULT, IPL_SOFTNET);
-	pm->addr_map = thmap_create(0, NULL, THMAP_NOCOPY);
-	if (pm->addr_map == NULL) {
-		kmem_free(pm, sizeof(npf_portmap_t));
-		return NULL;
-	}
-
-	return pm;
-}
 
 void
 npf_portmap_init(npf_t *npf)
 {
-	npf_portmap_params_t *params = npf_param_allocgroup(npf,
-	    NPF_PARAMS_PORTMAP, sizeof(npf_portmap_params_t));
+	npf_portmap_t *pm = npf_portmap_create(
+	    NPF_PORTMAP_MINPORT, NPF_PORTMAP_MAXPORT);
 	npf_param_t param_map[] = {
 		{
 			"portmap.min_port",
-			&params->min_port,
-			.default_val = 1024,
+			&pm->min_port,
+			.default_val = NPF_PORTMAP_MINPORT,
 			.min = 1024, .max = 65535
 		},
 		{
 			"portmap.max_port",
-			&params->max_port,
-			.default_val = 65535,
+			&pm->max_port,
+			.default_val = NPF_PORTMAP_MAXPORT,
 			.min = 1024, .max = 65535
 		}
 	};
 	npf_param_register(npf, param_map, __arraycount(param_map));
-
-	npf->portmap = npf_portmap_init_pm();
-}
-
-void
-npf_portmap_fini_pm(npf_portmap_t *pm)
-{
-	thmap_destroy(pm->addr_map);
-	mutex_destroy(&pm->list_lock);
-	kmem_free(pm, sizeof(npf_portmap_t));
+	npf->portmap = pm;
 }
 
 void
 npf_portmap_fini(npf_t *npf)
 {
-	const size_t len = sizeof(npf_portmap_params_t);
+	npf_portmap_destroy(npf->portmap);
+	npf->portmap = NULL; // diagnostic
+}
 
-	npf_param_freegroup(npf, NPF_PARAMS_PORTMAP, len);
+npf_portmap_t *
+npf_portmap_create(int min_port, int max_port)
+{
+	npf_portmap_t *pm;
 
-	npf_portmap_flush(npf);
-	KASSERT(LIST_EMPTY(&(npf->portmap->bitmap_list)));
+	pm = kmem_zalloc(sizeof(npf_portmap_t), KM_SLEEP);
+	mutex_init(&pm->list_lock, MUTEX_DEFAULT, IPL_SOFTNET);
+	pm->addr_map = thmap_create(0, NULL, THMAP_NOCOPY);
+	pm->min_port = min_port;
+	pm->max_port = max_port;
+	return pm;
+}
 
-	npf_portmap_fini_pm(npf->portmap);
+void
+npf_portmap_destroy(npf_portmap_t *pm)
+{
+	npf_portmap_flush(pm);
+	KASSERT(LIST_EMPTY(&pm->bitmap_list));
+
+	thmap_destroy(pm->addr_map);
+	mutex_destroy(&pm->list_lock);
+	kmem_free(pm, sizeof(npf_portmap_t));
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -251,7 +247,7 @@ bitmap_isset(const bitmap_t *bm, unsigned bit)
 
 	KASSERT(bit < PORTMAP_MAX_BITS);
 	i = bit >> PORTMAP_L0_SHIFT;
-	bval = bm->bits0[i];
+	bval = atomic_load_relaxed(&bm->bits0[i]);
 
 	/*
 	 * Empty check.  Note: we can test the whole word against zero,
@@ -284,7 +280,7 @@ again:
 	KASSERT(bit < PORTMAP_MAX_BITS);
 	i = bit >> PORTMAP_L0_SHIFT;
 	chunk_bit = bit & PORTMAP_L0_MASK;
-	bval = bm->bits0[i]; // atomic fetch
+	bval = atomic_load_relaxed(&bm->bits0[i]);
 
 	if ((bval & PORTMAP_L1_TAG) == 0) {
 		unsigned n = 0, bitvals[5];
@@ -343,7 +339,7 @@ again:
 	i = chunk_bit >> PORTMAP_L1_SHIFT;
 	b = UINT64_C(1) << (chunk_bit & PORTMAP_L1_MASK);
 
-	oval = bm1->bits1[i]; // atomic fetch
+	oval = atomic_load_relaxed(&bm1->bits1[i]);
 	if (oval & b) {
 		return false;
 	}
@@ -383,7 +379,7 @@ again:
 	i = chunk_bit >> PORTMAP_L1_SHIFT;
 	b = UINT64_C(1) << (chunk_bit & PORTMAP_L1_MASK);
 
-	oval = bm1->bits1[i]; // atomic fetch
+	oval = atomic_load_relaxed(&bm1->bits1[i]);
 	if ((oval & b) == 0) {
 		return false;
 	}
@@ -438,7 +434,6 @@ npf_portmap_autoget(npf_portmap_t *pm, unsigned alen, const npf_addr_t *addr)
 	return bm;
 }
 
-
 /*
  * npf_portmap_flush: free all bitmaps and remove all addresses.
  *
@@ -446,11 +441,9 @@ npf_portmap_autoget(npf_portmap_t *pm, unsigned alen, const npf_addr_t *addr)
  * need to acquire locks.
  */
 void
-npf_portmap_flush_(npf_portmap_t *pm)
+npf_portmap_flush(npf_portmap_t *pm)
 {
 	bitmap_t *bm;
-
-	KASSERT(npf_config_locked_p(npf));
 
 	while ((bm = LIST_FIRST(&pm->bitmap_list)) != NULL) {
 		for (unsigned i = 0; i < PORTMAP_L0_WORDS; i++) {
@@ -470,12 +463,6 @@ npf_portmap_flush_(npf_portmap_t *pm)
 	thmap_gc(pm->addr_map, thmap_stage_gc(pm->addr_map));
 }
 
-void
-npf_portmap_flush(npf_t *npf)
-{
-	npf_portmap_flush_(npf->portmap);
-}
-
 /*
  * npf_portmap_get: allocate and return a port from the given portmap.
  *
@@ -483,10 +470,9 @@ npf_portmap_flush(npf_t *npf)
  * => Zero indicates a failure.
  */
 in_port_t
-npf_portmap_get_pm(npf_portmap_t *pm, const npf_portmap_params_t *params,
-		  int alen, const npf_addr_t *addr)
+npf_portmap_get(npf_portmap_t *pm, int alen, const npf_addr_t *addr)
 {
-	const unsigned port_delta = params->max_port - params->min_port;
+	const unsigned port_delta = pm->max_port - pm->min_port;
 	unsigned bit, target;
 	bitmap_t *bm;
 
@@ -497,14 +483,14 @@ npf_portmap_get_pm(npf_portmap_t *pm, const npf_portmap_params_t *params,
 	}
 
 	/* Randomly select a port. */
-	target = params->min_port + (cprng_fast32() % port_delta);
+	target = pm->min_port + (cprng_fast32() % port_delta);
 	bit = target;
 next:
 	if (bitmap_set(bm, bit)) {
 		/* Success. */
 		return htons(bit);
 	}
-	bit = params->min_port + ((bit + 1) % port_delta);
+	bit = pm->min_port + ((bit + 1) % port_delta);
 	if (target != bit) {
 		/* Next.. */
 		goto next;
@@ -513,35 +499,21 @@ next:
 	return 0;
 }
 
-in_port_t
-npf_portmap_get(npf_t *npf, int alen, const npf_addr_t *addr)
-{
-	return npf_portmap_get_pm(npf->portmap, npf->params[NPF_PARAMS_PORTMAP],
-			  alen, addr);
-}
-
 /*
  * npf_portmap_take: allocate a specific port in the portmap.
  */
 bool
-npf_portmap_take_pm(npf_portmap_t *pm, const npf_portmap_params_t *params,
-		  int alen, const npf_addr_t *addr, in_port_t port)
+npf_portmap_take(npf_portmap_t *pm, int alen,
+    const npf_addr_t *addr, in_port_t port)
 {
 	bitmap_t *bm = npf_portmap_autoget(pm, alen, addr);
 
 	port = ntohs(port);
-	if (!bm || port < params->min_port || port > params->max_port) {
+	if (!bm || port < pm->min_port || port > pm->max_port) {
 		/* Out of memory / invalid port. */
 		return false;
 	}
 	return bitmap_set(bm, port);
-}
-
-bool
-npf_portmap_take(npf_t *npf, int alen, const npf_addr_t *addr, in_port_t port)
-{
-	return npf_portmap_take_pm(npf->portmap, npf->params[NPF_PARAMS_PORTMAP],
-			  alen, addr, port);
 }
 
 /*
@@ -550,8 +522,8 @@ npf_portmap_take(npf_t *npf, int alen, const npf_addr_t *addr, in_port_t port)
  * => The port value should be in network byte-order.
  */
 void
-npf_portmap_put_pm(npf_portmap_t *pm, int alen, const npf_addr_t *addr,
-		  in_port_t port)
+npf_portmap_put(npf_portmap_t *pm, int alen,
+    const npf_addr_t *addr, in_port_t port)
 {
 	bitmap_t *bm;
 
@@ -560,10 +532,4 @@ npf_portmap_put_pm(npf_portmap_t *pm, int alen, const npf_addr_t *addr,
 		port = ntohs(port);
 		bitmap_clr(bm, port);
 	}
-}
-
-void
-npf_portmap_put(npf_t *npf, int alen, const npf_addr_t *addr, in_port_t port)
-{
-	npf_portmap_put_pm(npf->portmap, alen, addr, port);
 }

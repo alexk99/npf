@@ -33,7 +33,7 @@
 
 #ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_state.c,v 1.21 2018/10/29 15:37:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD$");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,14 +51,14 @@ __KERNEL_RCSID(0, "$NetBSD: npf_state.c,v 1.21 2018/10/29 15:37:06 christos Exp 
 #define	NPF_ANY_CONN_CLOSED		0
 #define	NPF_ANY_CONN_NEW		1
 #define	NPF_ANY_CONN_ESTABLISHED	2
-#define  NPF_ANY_CONN_GRE		3
-#define	NPF_ANY_CONN_NSTATES		4
+#define	NPF_ANY_CONN_NSTATES		3
 
 /*
  * Parameters.
  */
 typedef struct {
 	int		timeouts[NPF_ANY_CONN_NSTATES];
+	int		gre_timeout;
 } npf_state_params_t;
 
 /*
@@ -117,9 +117,8 @@ npf_state_sysinit(npf_t *npf)
 		},
 		{
 			"state.generic.timeout.gre",
-			&params->timeouts[NPF_ANY_CONN_GRE],
-			/* don't expire GRE states by default */
-			.default_val = INT_MAX,
+			&params->gre_timeout,
+			.default_val = 24 * 60 * 60,
 			.min = 0, .max = INT_MAX
 		},
 	};
@@ -234,7 +233,7 @@ npf_state_etime(npf_t *npf, const npf_state_t *nst, const int proto)
 		break;
 	case IPPROTO_GRE:
 		params = npf->params[NPF_PARAMS_GENERIC_STATE];
-		timeout = params->timeouts[NPF_ANY_CONN_GRE];
+		timeout = params->gre_timeout;
 		break;
 	default:
 		KASSERT(false);

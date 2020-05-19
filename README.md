@@ -1,17 +1,18 @@
 # NPF: stateful packet filter supporting NAT, IP sets, etc
 
-[![Build Status](https://travis-ci.org/rmind/npf.svg?branch=master)](https://travis-ci.org/rmind/npf)
+[![Build Status](https://travis-ci.com/rmind/npf.svg?branch=master)](https://travis-ci.com/rmind/npf)
 
 NPF is a layer 3 packet filter, supporting stateful packet inspection,
-IPv6, NAT, IP sets, extensions and many more.  It was designed with a focus
-on high performance, scalability, multi-threading and modularity.  NPF was
-written from scratch in 2009.  It is written in C99 and distributed under
-the 2-clause BSD license.
+IPv6, NAT, IP sets, extensions and many more.
+It uses [BPF](https://en.wikipedia.org/wiki/Berkeley_Packet_Filter) as its
+core engine and it was designed with a focus on high performance, scalability,
+multi-threading and modularity.  NPF was written from scratch in 2009.  It is
+written in C99 and distributed under the 2-clause BSD license.
 
 NPF is provided as a **userspace library** to be used in a bespoke application
-to process packets. Typically, in combination with such frameworks like
-[Data Plane Development Kit (DPDK)](https://www.dpdk.org/) or
-[netmap](https://www.freebsd.org/cgi/man.cgi?query=netmap&sektion=4).
+to process packets. It can run on Linux, typically, in combination with such
+frameworks like [Data Plane Development Kit (DPDK)](https://www.dpdk.org/)
+or [netmap](https://www.freebsd.org/cgi/man.cgi?query=netmap&sektion=4).
 
 ## Features
 
@@ -24,6 +25,7 @@ Some key features are:
   - NAPT and other forms of port translation (e.g. port forwarding).
   - Inbound and outbound NAT as well as bi-directional NAT.
   - Network-to-network translation, including NETMAP and NPTv6.
+- Carrier-grade NAT (CG-NAT) capability: known to serve over a million connections.
 - Tables for efficient IP sets, including the _longest prefix match_ support.
 - Application Level Gateways (e.g. to support traceroute).
 - NPF uses [BPF with just-in-time (JIT) compilation](https://github.com/rmind/bpfjit).
@@ -34,6 +36,11 @@ Some key features are:
 For a full set of features and their description, see the NPF documentation
 and other manual pages.
 
+## Usage
+
+You can try **[NPF-Router](app)** as a demo NPF+DPDK application, running a
+virtual test network with Docker containers.
+
 ## Documentation
 
 See on [Github Pages](http://rmind.github.io/npf).
@@ -41,12 +48,12 @@ Source in the [docs](docs) directory.
 
 ## Dependencies
 
-- libnv: `git clone https://github.com/rmind/nvlist`
-- thmap: `git clone https://github.com/rmind/thmap`
-- libqsbr: `git clone https://github.com/rmind/libqsbr`
-- liblpm: `git clone https://github.com/rmind/liblpm`
-- bpfjit: `git clone https://github.com/rmind/bpfjit`
-- libcdb: `git clone https://github.com/rmind/libcdb`
+- [libnv](https://github.com/rmind/nvlist): `git clone https://github.com/rmind/nvlist`
+- [thmap](https://github.com/rmind/thmap): `git clone https://github.com/rmind/thmap`
+- [libqsbr](https://github.com/rmind/libqsbr): `git clone https://github.com/rmind/libqsbr`
+- [liblpm](https://github.com/rmind/liblpm): `git clone https://github.com/rmind/liblpm`
+- [bpfjit](https://github.com/rmind/bpfjit): `git clone https://github.com/rmind/bpfjit`
+- [libcdb](https://github.com/rmind/libcdb): `git clone https://github.com/rmind/libcdb`
 
 Each repository provides the build files for RPM (`cd pkg && make rpm`)
 and DEB (`cd pkg && make deb`) packages.  You can also check the
@@ -54,14 +61,15 @@ and DEB (`cd pkg && make deb`) packages.  You can also check the
 
 ## Source code structure
 
-    docs/               - documentation
+    app/                - NPF-Router demo application (NPF + DPDK + Docker)
+    docs/               - documentation source
     src/                - root source code directory
         kern/           - the kernel component (npfkern library)
         libnpf/         - library to manage the NPF configuration
         npfctl/         - command line user interface to control NPF
         npftest/        - unit tests and a tool to debug NPF
-    dpdk/               - DPDK integration code and a demo
     pkg/                - packaging files (RPM and DEB)
+    misc/               - auxiliary helper scripts
 
 ## Packages
 

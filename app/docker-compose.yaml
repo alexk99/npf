@@ -1,0 +1,83 @@
+version: '3.4'
+
+services:
+
+  npf-deps:
+    build:
+      context: ..
+      dockerfile: app/conf/npf-deps.Dockerfile
+    image: npf-deps
+    volumes:
+      - ../:/src
+
+  npf-pkg:
+    build:
+      context: ..
+      dockerfile: app/conf/npf-pkg.Dockerfile
+    depends_on:
+      - npf-deps
+    image: npf-pkg
+    volumes:
+      - ../:/src
+
+  npf-router-dev:
+    build:
+      context: ..
+      dockerfile: app/conf/npf-router.Dockerfile
+      target: npf-router-dev
+    image: npf_router_dev
+    privileged: true
+    depends_on:
+      - npf-pkg
+    hostname: npf-router
+    networks:
+      default:
+      testnet:
+        ipv4_address: 10.0.0.254
+    volumes:
+      - ../:/src
+    command:
+      - "/bin/true"
+
+  npf-router:
+    build:
+      context: ..
+      dockerfile: app/conf/npf-router.Dockerfile
+    image: npf_router
+    privileged: true
+    depends_on:
+      - npf-pkg
+    hostname: npf-router
+    networks:
+      default:
+      testnet:
+        ipv4_address: 10.0.0.2
+    command:
+      - "/app/run.sh"
+
+  host-1:
+    build:
+      context: ..
+      dockerfile: app/conf/host.Dockerfile
+    image: npf_host_1
+    privileged: true
+    hostname: npf_host_1
+    networks:
+      testnet:
+        ipv4_address: 10.0.0.3
+    #depends_on:
+    #  - npf-router
+    command:
+      - "/app/run_host.sh"
+
+networks:
+  testnet:
+    #
+    # NOTE: Must the 'macvlan' driver, otherwise Docker interferes
+    # at the Ethernet layer.
+    #
+    driver: macvlan
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.0.0.0/24

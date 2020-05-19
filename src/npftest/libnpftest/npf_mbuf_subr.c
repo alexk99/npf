@@ -15,7 +15,7 @@
 
 #if defined(_NPF_STANDALONE)
 struct mbuf *
-npfkern_m_get(int flags, int space)
+npfkern_m_get(npf_t *npf __unused, unsigned flags, size_t space)
 {
 	unsigned mlen = offsetof(struct mbuf, m_data0[space]);
 	struct mbuf *m;
@@ -30,7 +30,7 @@ npfkern_m_get(int flags, int space)
 }
 #else
 struct mbuf *
-npfkern_m_get(int flags, int space)
+npfkern_m_get(npf_t *npf __unused, unsigned flags, size_t space)
 {
 	return m_get(flags, space);
 }
@@ -92,7 +92,7 @@ npfkern_m_ensure_contig(struct mbuf **m0, size_t len)
 	char *dptr;
 
 	tlen = npfkern_m_length(*m0);
-	if ((m1 = npfkern_m_get(M_PKTHDR, tlen)) == NULL) {
+	if ((m1 = npfkern_m_get(NULL, M_PKTHDR, tlen)) == NULL) {
 		return false;
 	}
 	m1->m_pkthdr.len = m1->m_len = tlen;
@@ -101,6 +101,7 @@ npfkern_m_ensure_contig(struct mbuf **m0, size_t len)
 		memcpy(dptr, m->m_data, m->m_len);
 		dptr += m->m_len;
 	}
+	npfkern_m_freem(*m0);
 	*m0 = m1;
 	(void)len;
 	return true;
@@ -297,7 +298,7 @@ mbuf_get_pkt(int af, int proto, const char *src, const char *dst,
 		uh->uh_dport = htons(dport);
 		break;
 	default:
-		abort();
+		KASSERT(false);
 	}
 	return m;
 }

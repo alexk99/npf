@@ -33,13 +33,12 @@
 
 #ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_alg.c,v 1.19 2019/01/19 21:19:31 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD$");
 
 #include <sys/param.h>
 #include <sys/types.h>
 
 #include <sys/kmem.h>
-#include <sys/pserialize.h>
 #include <sys/module.h>
 #endif
 
@@ -157,14 +156,18 @@ npf_alg_register(npf_t *npf, const char *name, const npfa_funcs_t *funcs)
 	alg->na_name = name;
 	alg->na_slot = i;
 
-	/* Assign the functions. */
+	/*
+	 * Assign the functions.  Make sure the 'destroy' gets visible first.
+	 */
 	afuncs = &aset->alg_funcs[i];
-	afuncs->match = funcs->match;
-	afuncs->translate = funcs->translate;
-	afuncs->inspect = funcs->inspect;
-	afuncs->destroy = funcs->destroy;
+	atomic_store_relaxed(&afuncs->destroy, funcs->destroy);
+	membar_producer();
+	atomic_store_relaxed(&afuncs->translate, funcs->translate);
+	atomic_store_relaxed(&afuncs->inspect, funcs->inspect);
+	atomic_store_relaxed(&afuncs->match, funcs->match);
+	membar_producer();
 
-	aset->alg_count = MAX(aset->alg_count, i + 1);
+	atomic_store_relaxed(&aset->alg_count, MAX(aset->alg_count, i + 1));
 	npf_config_exit(npf);
 
 	return alg;
@@ -183,13 +186,17 @@ npf_alg_unregister(npf_t *npf, npf_alg_t *alg)
 	/* Deactivate the functions first. */
 	npf_config_enter(npf);
 	afuncs = &aset->alg_funcs[i];
-	afuncs->match = NULL;
-	afuncs->translate = NULL;
-	afuncs->inspect = NULL;
-	pserialize_perform(npf->qsbr);
+	atomic_store_relaxed(&afuncs->match, NULL);
+	atomic_store_relaxed(&afuncs->translate, NULL);
+	atomic_store_relaxed(&afuncs->inspect, NULL);
+	npf_config_sync(npf);
 
-	/* Finally, unregister the ALG. */
+	/*
+	 * Finally, unregister the ALG.  We leave the 'destroy' callback
+	 * as the following will invoke it for the relevant connections.
+	 */
 	npf_ruleset_freealg(npf_config_natset(npf), alg);
+	atomic_store_relaxed(&afuncs->destroy, NULL);
 	alg->na_name = NULL;
 	npf_config_exit(npf);
 
@@ -211,22 +218,27 @@ npf_alg_unregister(npf_t *npf, npf_alg_t *alg)
 bool
 npf_alg_match(npf_cache_t *npc, npf_nat_t *nt, int di)
 {
-	npf_algset_t *aset = npc->npc_ctx->algset;
+	npf_t *npf = npc->npc_ctx;
+	npf_algset_t *aset = npf->algset;
 	bool match = false;
+	unsigned count;
 	int s;
 
 	KASSERTMSG(npf_iscached(npc, NPC_IP46), "expecting protocol number");
 
-	s = pserialize_read_enter();
-	for (unsigned i = 0; i < aset->alg_count; i++) {
+	s = npf_config_read_enter(npf);
+	count = atomic_load_relaxed(&aset->alg_count);
+	for (unsigned i = 0; i < count; i++) {
 		const npfa_funcs_t *f = &aset->alg_funcs[i];
+		bool (*match_func)(npf_cache_t *, npf_nat_t *, int);
 
-		if (f->match && f->match(npc, nt, di)) {
+		match_func = atomic_load_relaxed(&f->match);
+		if (match_func && match_func(npc, nt, di)) {
 			match = true;
 			break;
 		}
 	}
-	pserialize_read_exit(s);
+	npf_config_read_exit(npf, s);
 	return match;
 }
 
@@ -234,9 +246,7 @@ npf_alg_match(npf_cache_t *npc, npf_nat_t *nt, int di)
  * npf_alg_exec: execute the ALG translation processors.
  *
  *	The ALG function would perform any additional packet translation
- *	or manipulation here.  The translate function will be called by
- *	once the ALG has been associated with the NAT state through the
- *	npf_alg_match() inspector.
+ *	or manipulation here.
  *
  *	=> This is called when the packet is being translated according
  *	   to the dynamic NAT logic [NAT-TRANSLATE].
@@ -244,29 +254,32 @@ npf_alg_match(npf_cache_t *npc, npf_nat_t *nt, int di)
 void
 npf_alg_exec(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 {
+	npf_t *npf = npc->npc_ctx;
+	npf_algset_t *aset = npf->algset;
+	unsigned count;
 	int s;
-	npf_alg_t *alg;
-	npfa_funcs_t *funcs;
 
-	s = pserialize_read_enter();
+	s = npf_config_read_enter(npf);
+	count = atomic_load_relaxed(&aset->alg_count);
+	for (unsigned i = 0; i < count; i++) {
+		const npfa_funcs_t *f = &aset->alg_funcs[i];
+		bool (*translate_func)(npf_cache_t *, npf_nat_t *, bool);
 
-	alg = npf_nat_get_alg(nt);
-	if (alg != NULL) {
-		funcs = npf_alg_get_funcs(npc->npc_ctx, alg);
-		if (funcs->translate != NULL)
-			funcs->translate(npc, nt, forw);
+		translate_func = atomic_load_relaxed(&f->translate);
+		if (translate_func) {
+			translate_func(npc, nt, forw);
+		}
 	}
-
-	pserialize_read_exit(s);
+	npf_config_read_exit(npf, s);
 }
 
 /*
- * npf_alg_conn: query ALGs giving which may perform a custom state lookup.
+ * npf_alg_conn: query ALGs which may perform a custom state lookup.
  *
  *	The purpose of ALG connection inspection function is to provide
  *	ALGs with a mechanism to override the regular connection state
  *	lookup, if they need to.  For example, some ALGs may want to
- *	extract and use a different 5-tuple to perform a lookup.
+ *	extract and use a different n-tuple to perform a lookup.
  *
  *	=> This is called at the beginning of the connection state lookup
  *	   function [CONN-LOOKUP].
@@ -280,28 +293,47 @@ npf_alg_exec(npf_cache_t *npc, npf_nat_t *nt, bool forw)
 npf_conn_t *
 npf_alg_conn(npf_cache_t *npc, int di)
 {
-	npf_algset_t *aset = npc->npc_ctx->algset;
+	npf_t *npf = npc->npc_ctx;
+	npf_algset_t *aset = npf->algset;
 	npf_conn_t *con = NULL;
+	unsigned count;
 	int s;
 
-	s = pserialize_read_enter();
-	for (unsigned i = 0; i < aset->alg_count; i++) {
+	s = npf_config_read_enter(npf);
+	count = atomic_load_relaxed(&aset->alg_count);
+	for (unsigned i = 0; i < count; i++) {
 		const npfa_funcs_t *f = &aset->alg_funcs[i];
+		npf_conn_t *(*inspect_func)(npf_cache_t *, int);
 
-		if (!f->inspect)
-			continue;
-		if ((con = f->inspect(npc, di)) != NULL)
+		inspect_func = atomic_load_relaxed(&f->inspect);
+		if (inspect_func && (con = inspect_func(npc, di)) != NULL) {
 			break;
+		}
 	}
-	pserialize_read_exit(s);
+	npf_config_read_exit(npf, s);
 	return con;
+}
+
+/*
+ * npf_alg_destroy: free the ALG structure associated with the NAT entry.
+ */
+void
+npf_alg_destroy(npf_t *npf, npf_alg_t *alg, npf_nat_t *nat, npf_conn_t *con)
+{
+	npf_algset_t *aset = npf->algset;
+	const npfa_funcs_t *f = &aset->alg_funcs[alg->na_slot];
+	void (*destroy_func)(npf_t *, npf_nat_t *, npf_conn_t *);
+
+	if ((destroy_func = atomic_load_relaxed(&f->destroy)) != NULL) {
+		destroy_func(npf, nat, con);
+	}
 }
 
 /*
  * npf_alg_export: serialise the configuration of ALGs.
  */
 int
-npf_alg_export(npf_t *npf, nvlist_t *npf_dict)
+npf_alg_export(npf_t *npf, nvlist_t *nvl)
 {
 	npf_algset_t *aset = npf->algset;
 
@@ -316,14 +348,8 @@ npf_alg_export(npf_t *npf, nvlist_t *npf_dict)
 		}
 		algdict = nvlist_create(0);
 		nvlist_add_string(algdict, "name", alg->na_name);
-		nvlist_append_nvlist_array(npf_dict, "algs", algdict);
+		nvlist_append_nvlist_array(nvl, "algs", algdict);
 		nvlist_destroy(algdict);
 	}
 	return 0;
-}
-
-npfa_funcs_t *
-npf_alg_get_funcs(npf_t *npf, npf_alg_t *alg)
-{
-	return &npf->algset->alg_funcs[alg->na_slot];
 }

@@ -28,6 +28,8 @@ CFLAGS+=	-Wold-style-definition
 
 ifeq ($(DEBUG),1)
 CFLAGS+=	-Og -DDEBUG -fno-omit-frame-pointer
+CFLAGS+=	-fsanitize=address -fsanitize=undefined
+LDFLAGS+=	-fsanitize=address -fsanitize=undefined
 else
 CFLAGS+=	-DNDEBUG
 endif
@@ -50,7 +52,7 @@ endif
 #
 
 OBJS=		npfctl.o npf_var.o npf_data.o npf_build.o npf_extmod.o
-OBJS+=		npf_bpf_comp.o npf_show.o
+OBJS+=		npf_bpf_comp.o npf_show.o npf_cmd.o
 OBJS+=		npf_parse.o npf_scan.o
 
 MAN5=		npf.conf.5

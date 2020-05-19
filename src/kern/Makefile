@@ -3,28 +3,26 @@
 # This file is in the Public Domain.
 #
 
+SYSNAME:=	$(shell uname -s)
+SYSARCH:=	$(shell uname -m)
+
 CFLAGS+=	-std=c99 -O2 -g -Wall -Wextra -Werror
 CFLAGS+=	-D_POSIX_C_SOURCE=200809L
 CFLAGS+=	-D_GNU_SOURCE -D_DEFAULT_SOURCE
 CFLAGS+=	-I stand -D_NPF_STANDALONE -D__RCSID\(x\)=
 CFLAGS+=	-Wno-unused-local-typedefs -Wno-unused-parameter
 
-SYSNAME:=	$(shell uname -s)
-
 #
 # Extended warning flags.
 #
 CFLAGS+=	-Wno-unknown-warning-option # gcc vs clang
-
 CFLAGS+=	-Wstrict-prototypes -Wmissing-prototypes -Wpointer-arith
 CFLAGS+=	-Wmissing-declarations -Wredundant-decls -Wnested-externs
 CFLAGS+=	-Wshadow -Wcast-qual -Wcast-align -Wwrite-strings
 CFLAGS+=	-Wold-style-definition
 CFLAGS+=	-Wsuggest-attribute=noreturn #-Wjump-misses-init
-
-# New GCC 6/7 flags:
-#CFLAGS+=	-Wduplicated-cond -Wmisleading-indentation -Wnull-dereference
-#CFLAGS+=	-Wduplicated-branches -Wrestrict
+CFLAGS+=	-Wduplicated-cond -Wmisleading-indentation -Wnull-dereference
+CFLAGS+=	-Wduplicated-branches -Wrestrict
 
 #
 # WARNING: All symbols must be hidden by default to not conflict with
@@ -32,8 +30,12 @@ CFLAGS+=	-Wsuggest-attribute=noreturn #-Wjump-misses-init
 #
 ifeq ($(DEBUG),1)
 CFLAGS+=	-Og -DDEBUG -fno-omit-frame-pointer -D_NPF_TESTING
-CFLAGS+=	-fsanitize=address
-LDFLAGS+=	-fsanitize=address
+ifeq ($(SYSARCH),x86_64)
+ifeq ($(CC),gcc) # XXX clang
+CFLAGS+=	-fsanitize=address -fsanitize=undefined
+LDFLAGS+=	-fsanitize=address -fsanitize=undefined
+endif
+endif
 OBJDIR=		debug
 else
 CFLAGS+=	-fvisibility=hidden
@@ -41,6 +43,7 @@ CFLAGS+=	-DNDEBUG
 OBJDIR=		build
 endif
 
+CFLAGS+=	-pthread
 LDFLAGS+=	-lpthread -lnv -lqsbr -lthmap -llpm -lcdb -lbpfjit
 ifeq ($(SYSNAME),Linux)
 LDFLAGS+=	-ljemalloc
@@ -52,16 +55,12 @@ endif
 
 OBJS=		$(shell awk '/^file/ { print $$2 }' files.npf | \
 		    sed 's:\(.*\)net/npf/\(.*\).c:\2.o:g' | \
-		    egrep -v '^(npf_os|npf_ext_|npf_ifaddr|if_npflog|lpm)')
-	
-OBJS+=		npf_alg_icmp.o npf_alg_pptp.o
-OBJS+=		stand/bpf_filter.o
-OBJS+=		stand/murmurhash.o stand/tls_pth.o stand/misc.o
+		    egrep -v '^(npf_os|npf_ext_log|npf_ifaddr|if_npflog|lpm)')
 
-ifeq ($(NPF_PRINT_DEBUG),1)
-CFLAGS+=	-DNPF_PRINT_DEBUG
-OBJS+=		npf_print_debug.o
-endif
+OBJS+=		stand/npfkern.o stand/bpf_filter.o
+OBJS+=		stand/murmurhash.o stand/tls_pth.o
+OBJS+=		stand/ebr_wrappers.o
+
 #
 # Flags for the library target
 #
@@ -91,7 +90,7 @@ $(OBJDIR)/%.lo: %.c
 	libtool --mode=compile --tag CC $(CC) $(CFLAGS) -c -o $@ $<
 
 $(LIB).la: $(addprefix $(OBJDIR)/,$(shell echo $(OBJS) | sed 's/\.o/\.lo/g'))
-	libtool --mode=link --tag CC $(CC) $(LDFLAGS) -o $@ $^
+	libtool --mode=link --tag CC $(CC) -o $@ $^ $(LDFLAGS)
 
 install/%.la: %.la
 	mkdir -p $(ILIBDIR)

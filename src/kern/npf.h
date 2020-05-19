@@ -142,13 +142,9 @@ int		nbuf_find_tag(nbuf_t *, uint32_t *);
 
 #define	NPC_FMTERR	0x200	/* Format error. */
 
-#define	NPC_ALG_PPTP_GRE	0x400	/* PPTP GRE header */
-#define	NPC_ALG_PPTP_GRE_CTX	0x800	/* PPTP GRE context */
-
 #define	NPC_IP46	(NPC_IP4|NPC_IP6)
 
-struct pptp_gre_hdr;
-struct pptp_gre_context;
+struct npf_connkey;
 
 typedef struct {
 	/* NPF context, information flags and the nbuf. */
@@ -173,16 +169,21 @@ typedef struct {
 		struct ip6_hdr *	v6;
 	} npc_ip;
 
-	/* TCP, UDP, ICMP, PPTP_GRE */
+	/* TCP, UDP, ICMP or other protocols. */
 	union {
 		struct tcphdr *		tcp;
 		struct udphdr *		udp;
 		struct icmp *		icmp;
 		struct icmp6_hdr *	icmp6;
 		void *			hdr;
-		struct pptp_gre_hdr *		pptp_gre;
-		struct pptp_gre_context *	pptp_gre_ctx;
 	} npc_l4;
+
+	/*
+	 * Override the connection key, if not NULL.  This affects the
+	 * behaviour of npf_conn_lookup() and npf_conn_establish().
+	 * Note: npc_ckey is of npf_connkey_t type.
+	 */
+	const void *		npc_ckey;
 } npf_cache_t;
 
 static inline bool
@@ -261,8 +262,9 @@ bool		npf_autounload_p(void);
 #define	NPF_LAYER_2			2
 #define	NPF_LAYER_3			3
 
-/* XXX mbuf.h: just for now. */
-#define	PACKET_TAG_NPF			10
+/*
+ * Flags passed via nbuf tags.
+ */
 #define	NPF_NTAG_PASS			0x0001
 
 /*
@@ -318,6 +320,7 @@ typedef struct npf_ioctl_table {
 #define	IOC_NPF_SAVE		_IOR('N', 105, nvlist_ref_t)
 #define	IOC_NPF_RULE		_IOWR('N', 107, nvlist_ref_t)
 #define	IOC_NPF_CONN_LOOKUP	_IOWR('N', 108, nvlist_ref_t)
+#define	IOC_NPF_TABLE_REPLACE	_IOWR('N', 109, nvlist_ref_t)
 
 /*
  * NPF error report.

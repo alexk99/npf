@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2010-2019 The NetBSD Foundation, Inc.
+ * Copyright (c) 2010-2020 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This material is based upon work partially supported by The
@@ -30,6 +30,10 @@
 /*
  * NPF connection storage.
  *
+ * Lock-free connection lookups are protected by EBR with an atomic
+ * reference acquisition before exiting the critical path.  The caller
+ * is responsible for re-checking the connection state.
+ *
  * Warning (not applicable for the userspace npfkern):
  *
  *	thmap is partially lock-free data structure that uses its own
@@ -41,12 +45,13 @@
  *	the same guarantees as a spinning mutex(9) would provide.
  *
  *	This is achieved with SPL routines splsoftnet() and splx() around
- *	the thmap_del() and thmap_put() calls.
+ *	the thmap_del() and thmap_put() calls.  Note: we assume that the
+ *	network stack invokes NPF at IPL_SOFTNET or lower, but not higher.
  */
 
 #ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_conndb.c,v 1.5 2019/01/19 21:19:31 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD$");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -143,8 +148,9 @@ npf_conndb_destroy(npf_conndb_t *cd)
  * npf_conndb_lookup: find a connection given the key.
  */
 npf_conn_t *
-npf_conndb_lookup(npf_conndb_t *cd, const npf_connkey_t *ck, bool *forw)
+npf_conndb_lookup(npf_t *npf, const npf_connkey_t *ck, bool *forw)
 {
+	npf_conndb_t *cd = atomic_load_relaxed(&npf->conn_db);
 	const unsigned keylen = NPF_CONNKEY_LEN(ck);
 	npf_conn_t *con;
 	void *val;
@@ -152,8 +158,10 @@ npf_conndb_lookup(npf_conndb_t *cd, const npf_connkey_t *ck, bool *forw)
 	/*
 	 * Lookup the connection key in the key-value map.
 	 */
+	int s = npf_config_read_enter(npf);
 	val = thmap_get(cd->cd_map, ck->ck_key, keylen);
 	if (!val) {
+		npf_config_read_exit(npf, s);
 		return NULL;
 	}
 
@@ -169,6 +177,7 @@ npf_conndb_lookup(npf_conndb_t *cd, const npf_connkey_t *ck, bool *forw)
 	 * Acquire a reference and return the connection.
 	 */
 	atomic_inc_uint(&con->c_refcnt);
+	npf_config_read_exit(npf, s);
 	return con;
 }
 
@@ -226,8 +235,8 @@ npf_conndb_enqueue(npf_conndb_t *cd, npf_conn_t *con)
 	npf_conn_t *head;
 
 	do {
-		head = cd->cd_new;
-		con->c_next = head;
+		head = atomic_load_relaxed(&cd->cd_new);
+		atomic_store_relaxed(&con->c_next, head);
 	} while (atomic_cas_ptr(&cd->cd_new, head, con) != head);
 }
 
@@ -243,7 +252,7 @@ npf_conndb_update(npf_conndb_t *cd)
 
 	con = atomic_swap_ptr(&cd->cd_new, NULL);
 	while (con) {
-		npf_conn_t *next = con->c_next; // union
+		npf_conn_t *next = atomic_load_relaxed(&con->c_next); // union
 		LIST_INSERT_HEAD(&cd->cd_list, con, c_entry);
 		con = next;
 	}
@@ -282,6 +291,8 @@ npf_conndb_gc_incr(npf_t *npf, npf_conndb_t *cd, const time_t now)
 	const npf_conndb_params_t *params = npf->params[NPF_PARAMS_CONNDB];
 	unsigned target = params->gc_step;
 	npf_conn_t *con;
+
+	KASSERT(mutex_owned(&npf->conn_lock));
 
 	/*
 	 * Second, start from the "last" (marker) connection.
@@ -371,7 +382,7 @@ npf_conndb_gc(npf_t *npf, npf_conndb_t *cd, bool flush, bool sync)
 	 * Note: drop the conn_lock (see the lock order).
 	 */
 	gcref = thmap_stage_gc(cd->cd_map);
-	if (sync) {
+	if (sync && (gcref || !LIST_EMPTY(&cd->cd_gclist))) {
 		npf_config_enter(npf);
 		npf_config_sync(npf);
 		npf_config_exit(npf);
@@ -396,12 +407,14 @@ npf_conndb_gc(npf_t *npf, npf_conndb_t *cd, bool flush, bool sync)
 		 * Destroy only if removed and no references.  Otherwise,
 		 * just do it next time, unless we are destroying all.
 		 */
-		if (__predict_false(con->c_refcnt)) {
-			if (!flush) {
-				break;
+		const unsigned refcnt = atomic_load_relaxed(&con->c_refcnt);
+
+		if (__predict_false(refcnt)) {
+			if (flush) {
+				kpause("npfcongc", false, 1, NULL);
+				continue;
 			}
-			kpause("npfcongc", false, 1, NULL);
-			continue;
+			break; // exit the loop
 		}
 		LIST_REMOVE(con, c_entry);
 		npf_conn_destroy(npf, con);

@@ -164,8 +164,8 @@ static bool
 checkresult(bool verbose, unsigned i, struct mbuf *m, ifnet_t *ifp, int error)
 {
 	const struct test_case *t = &test_cases[i];
-	npf_cache_t npc = { .npc_info = 0, .npc_ctx = npf_getkernctx() };
 	const int af = t->af;
+	npf_cache_t npc;
 	nbuf_t nbuf;
 
 	if (verbose) {
@@ -176,7 +176,10 @@ checkresult(bool verbose, unsigned i, struct mbuf *m, ifnet_t *ifp, int error)
 	}
 
 	nbuf_init(npf_getkernctx(), &nbuf, m, ifp);
+	memset(&npc, 0, sizeof(npf_cache_t));
+	npc.npc_ctx = npf_getkernctx();
 	npc.npc_nbuf = &nbuf;
+
 	if (!npf_cache_all(&npc)) {
 		printf("error: could not fetch the packet data");
 		return false;
@@ -217,7 +220,6 @@ npf_nat_test(bool verbose)
 {
 	npf_t *npf = npf_getkernctx();
 
-	srandom(1);
 	for (unsigned i = 0; i < __arraycount(test_cases); i++) {
 		const struct test_case *t = &test_cases[i];
 		ifnet_t *ifp = npf_test_getif(t->ifname);
@@ -231,7 +233,7 @@ npf_nat_test(bool verbose)
 		}
 		m = mbuf_get_pkt(t->af, IPPROTO_UDP,
 		    t->src, t->dst, t->sport, t->dport);
-		error = npf_packet_handler(npf, &m, ifp, t->di);
+		error = npfk_packet_handler(npf, &m, ifp, t->di);
 		ret = checkresult(verbose, i, m, ifp, error);
 		if (m) {
 			m_freem(m);

@@ -33,7 +33,7 @@
 
 #ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_alg_icmp.c,v 1.31 2018/09/29 14:41:36 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_alg_icmp.c,v 1.32 2019/07/23 00:52:01 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/module.h>
@@ -203,9 +203,9 @@ npfa_icmp_inspect(npf_cache_t *npc, npf_cache_t *enpc)
 	if (!nbuf_advance(nbuf, npc->npc_hlen, 0)) {
 		return false;
 	}
+	memset(enpc, 0, sizeof(npf_cache_t));
 	enpc->npc_ctx = npc->npc_ctx;
 	enpc->npc_nbuf = nbuf;
-	enpc->npc_info = 0;
 
 	/*
 	 * Inspect the ICMP packet.  The relevant data might be in the
@@ -453,7 +453,7 @@ err:
  * and module interface.
  */
 
-int
+__dso_public int
 npf_alg_icmp_init(npf_t *npf)
 {
 	static const npfa_funcs_t icmp = {
@@ -466,7 +466,7 @@ npf_alg_icmp_init(npf_t *npf)
 	return alg_icmp ? 0 : ENOMEM;
 }
 
-int
+__dso_public int
 npf_alg_icmp_fini(npf_t *npf)
 {
 	KASSERT(alg_icmp != NULL);
@@ -478,12 +478,6 @@ static int
 npf_alg_icmp_modcmd(modcmd_t cmd, void *arg)
 {
 	npf_t *npf = npf_getkernctx();
-#else
-int
-npf_alg_icmp_modcmd(modcmd_t cmd, void *arg)
-{
-	npf_t *npf = arg;
-#endif
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
@@ -497,3 +491,4 @@ npf_alg_icmp_modcmd(modcmd_t cmd, void *arg)
 	}
 	return 0;
 }
+#endif

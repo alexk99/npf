@@ -28,33 +28,23 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: npfctl.c,v 1.57 2019/01/19 21:19:32 rmind Exp $");
+__RCSID("$NetBSD$");
 
-#include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/socket.h>
 #include <sys/mman.h>
 #ifdef __NetBSD__
-#include <sha1.h>
-#include <sys/ioctl.h>
 #include <sys/module.h>
-#define SHA_DIGEST_LENGTH SHA1_DIGEST_LENGTH
-#else
-#include <openssl/sha.h>
 #endif
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <err.h>
-#include <fcntl.h>
 #include <unistd.h>
-#include <errno.h>
-
-#include <arpa/inet.h>
+#include <fcntl.h>
+#include <err.h>
 
 #include "npfctl.h"
-
-extern void		npf_yyparse_string(const char *);
 
 enum {
 	NPFCTL_START,
@@ -72,37 +62,10 @@ enum {
 	NPFCTL_CONN_LIST,
 };
 
-static const struct operations_s {
-	const char *		cmd;
-	int			action;
-} operations[] = {
-	/* Start, stop, reload */
-	{	"start",	NPFCTL_START		},
-	{	"stop",		NPFCTL_STOP		},
-	{	"reload",	NPFCTL_RELOAD		},
-	{	"show",		NPFCTL_SHOWCONF,	},
-	{	"flush",	NPFCTL_FLUSH		},
-	/* Table */
-	{	"table",	NPFCTL_TABLE		},
-	/* Rule */
-	{	"rule",		NPFCTL_RULE		},
-	/* Stats */
-	{	"stats",	NPFCTL_STATS		},
-	/* Full state save/load */
-	{	"save",		NPFCTL_SAVE		},
-	{	"load",		NPFCTL_LOAD		},
-	{	"list",		NPFCTL_CONN_LIST	},
-	/* Misc. */
-	{	"valid",	NPFCTL_VALIDATE		},
-	{	"debug",	NPFCTL_DEBUG		},
-	/* --- */
-	{	NULL,		0			}
-};
-
 bool
 join(char *buf, size_t buflen, int count, char **args, const char *sep)
 {
-	const u_int seplen = strlen(sep);
+	const unsigned seplen = strlen(sep);
 	char *s = buf, *p = NULL;
 
 	for (int i = 0; i < count; i++) {
@@ -121,7 +84,7 @@ join(char *buf, size_t buflen, int count, char **args, const char *sep)
 	return true;
 }
 
-__dead static void
+__dead void
 usage(void)
 {
 	const char *progname = getprogname();
@@ -142,10 +105,14 @@ usage(void)
 	    "\t%s rule \"rule-name\" { list | flush }\n",
 	    progname);
 	fprintf(stderr,
-	    "\t%s table <tid> { add | rem | test } <address/mask>\n",
+	    "\t%s table \"table-name\" { add | rem | test } <address/mask>\n",
 	    progname);
 	fprintf(stderr,
-	    "\t%s table <tid> { list | flush }\n",
+	    "\t%s table \"table-name\" { list | flush }\n",
+	    progname);
+	fprintf(stderr,
+	    "\t%s table \"table-name\" replace [-n \"name\"]"
+	    " [-t <type>] <table-file>\n",
 	    progname);
 	fprintf(stderr,
 	    "\t%s save | load\n",
@@ -231,7 +198,7 @@ npfctl_print_error(const npf_error_t *ne)
 	const char *srcfile = ne->source_file;
 
 	if (ne->error_msg) {
-		warnx("%s", ne->error_msg);
+		errx(EXIT_FAILURE, "%s", ne->error_msg);
 	}
 	if (srcfile) {
 		warnx("source %s line %d", srcfile, ne->source_line);
@@ -265,7 +232,7 @@ npfctl_print_addrmask(int alen, const char *fmt, const npf_addr_t *addr,
 		break;
 	}
 	default:
-		assert(false);
+		abort();
 	}
 	sockaddr_snprintf(buf, buflen, fmt, (const void *)&ss);
 	if (mask && mask != NPF_NO_NETMASK) {
@@ -273,243 +240,6 @@ npfctl_print_addrmask(int alen, const char *fmt, const npf_addr_t *addr,
 		snprintf(&buf[len], buflen - len, "/%u", mask);
 	}
 	return buf;
-}
-
-__dead static void
-npfctl_table(int fd, int argc, char **argv)
-{
-	static const struct tblops_s {
-		const char *	cmd;
-		int		action;
-	} tblops[] = {
-		{ "add",	NPF_CMD_TABLE_ADD		},
-		{ "rem",	NPF_CMD_TABLE_REMOVE		},
-		{ "del",	NPF_CMD_TABLE_REMOVE		},
-		{ "test",	NPF_CMD_TABLE_LOOKUP		},
-		{ "list",	NPF_CMD_TABLE_LIST		},
-		{ "flush",	NPF_CMD_TABLE_FLUSH		},
-		{ NULL,		0				}
-	};
-	npf_ioctl_table_t nct;
-	fam_addr_mask_t fam;
-	size_t buflen = 512;
-	char *cmd, *arg;
-	int n, alen;
-
-	/* Default action is list. */
-	memset(&nct, 0, sizeof(npf_ioctl_table_t));
-	nct.nct_name = argv[0];
-	cmd = argv[1];
-
-	for (n = 0; tblops[n].cmd != NULL; n++) {
-		if (strcmp(cmd, tblops[n].cmd) != 0) {
-			continue;
-		}
-		nct.nct_cmd = tblops[n].action;
-		break;
-	}
-	if (tblops[n].cmd == NULL) {
-		errx(EXIT_FAILURE, "invalid command '%s'", cmd);
-	}
-
-	switch (nct.nct_cmd) {
-	case NPF_CMD_TABLE_LIST:
-	case NPF_CMD_TABLE_FLUSH:
-		arg = NULL;
-		break;
-	default:
-		if (argc < 3) {
-			usage();
-		}
-		arg = argv[2];
-	}
-
-again:
-	switch (nct.nct_cmd) {
-	case NPF_CMD_TABLE_LIST:
-		nct.nct_data.buf.buf = ecalloc(1, buflen);
-		nct.nct_data.buf.len = buflen;
-		break;
-	case NPF_CMD_TABLE_FLUSH:
-		break;
-	default:
-		if (!npfctl_parse_cidr(arg, &fam, &alen)) {
-			errx(EXIT_FAILURE, "invalid CIDR '%s'", arg);
-		}
-		nct.nct_data.ent.alen = alen;
-		memcpy(&nct.nct_data.ent.addr, &fam.fam_addr, alen);
-		nct.nct_data.ent.mask = fam.fam_mask;
-	}
-
-	if (ioctl(fd, IOC_NPF_TABLE, &nct) != -1) {
-		errno = 0;
-	}
-	switch (errno) {
-	case 0:
-		break;
-	case EEXIST:
-		errx(EXIT_FAILURE, "entry already exists or is conflicting");
-	case ENOENT:
-		errx(EXIT_FAILURE, "not found");
-	case EINVAL:
-		errx(EXIT_FAILURE, "invalid address, mask or table ID");
-	case ENOMEM:
-		if (nct.nct_cmd == NPF_CMD_TABLE_LIST) {
-			/* XXX */
-			free(nct.nct_data.buf.buf);
-			buflen <<= 1;
-			goto again;
-		}
-		/* FALLTHROUGH */
-	default:
-		err(EXIT_FAILURE, "ioctl(IOC_NPF_TABLE)");
-	}
-
-	if (nct.nct_cmd == NPF_CMD_TABLE_LIST) {
-		npf_ioctl_ent_t *ent = nct.nct_data.buf.buf;
-		char *buf;
-
-		while (nct.nct_data.buf.len--) {
-			if (!ent->alen)
-				break;
-			buf = npfctl_print_addrmask(ent->alen, "%a",
-			    &ent->addr, ent->mask);
-			puts(buf);
-			ent++;
-		}
-		free(nct.nct_data.buf.buf);
-	} else {
-		printf("%s: %s\n", getprogname(),
-		    nct.nct_cmd == NPF_CMD_TABLE_LOOKUP ?
-		    "match" : "success");
-	}
-	exit(EXIT_SUCCESS);
-}
-
-static nl_rule_t *
-npfctl_parse_rule(int argc, char **argv)
-{
-	char rule_string[1024];
-	nl_rule_t *rl;
-
-	/* Get the rule string and parse it. */
-	if (!join(rule_string, sizeof(rule_string), argc, argv, " ")) {
-		errx(EXIT_FAILURE, "command too long");
-	}
-	npfctl_parse_string(rule_string);
-	if ((rl = npfctl_rule_ref()) == NULL) {
-		errx(EXIT_FAILURE, "could not parse the rule");
-	}
-	return rl;
-}
-
-#ifdef __NetBSD__
-static unsigned char *
-SHA1(const unsigned char *d, size_t l, unsigned char *md)
-{
-	SHA1_CTX c;
-
-	SHA1Init(&c);
-	SHA1Update(&c, d, l);
-	SHA1Final(md, &c);
-	return md;
-}
-#endif
-
-static void
-npfctl_generate_key(nl_rule_t *rl, void *key)
-{
-	void *meta;
-	size_t len;
-
-	if ((meta = npf_rule_export(rl, &len)) == NULL) {
-		errx(EXIT_FAILURE, "error generating rule key");
-	}
-	__CTASSERT(NPF_RULE_MAXKEYLEN >= SHA_DIGEST_LENGTH);
-	memset(key, 0, NPF_RULE_MAXKEYLEN);
-	SHA1(meta, len, key);
-	free(meta);
-}
-
-__dead static void
-npfctl_rule(int fd, int argc, char **argv)
-{
-	static const struct ruleops_s {
-		const char *	cmd;
-		int		action;
-		bool		extra_arg;
-	} ruleops[] = {
-		{ "add",	NPF_CMD_RULE_ADD,	true	},
-		{ "rem",	NPF_CMD_RULE_REMKEY,	true	},
-		{ "del",	NPF_CMD_RULE_REMKEY,	true	},
-		{ "rem-id",	NPF_CMD_RULE_REMOVE,	true	},
-		{ "list",	NPF_CMD_RULE_LIST,	false	},
-		{ "flush",	NPF_CMD_RULE_FLUSH,	false	},
-		{ NULL,		0,			0	}
-	};
-	uint8_t key[NPF_RULE_MAXKEYLEN];
-	const char *ruleset_name = argv[0];
-	const char *cmd = argv[1];
-	int error, action = 0;
-	uint64_t rule_id;
-	bool extra_arg;
-	nl_rule_t *rl;
-
-	for (int n = 0; ruleops[n].cmd != NULL; n++) {
-		if (strcmp(cmd, ruleops[n].cmd) == 0) {
-			action = ruleops[n].action;
-			extra_arg = ruleops[n].extra_arg;
-			break;
-		}
-	}
-	argc -= 2;
-	argv += 2;
-
-	if (!action || (extra_arg && argc == 0)) {
-		usage();
-	}
-
-	switch (action) {
-	case NPF_CMD_RULE_ADD:
-		rl = npfctl_parse_rule(argc, argv);
-		npfctl_generate_key(rl, key);
-		npf_rule_setkey(rl, key, sizeof(key));
-		error = npf_ruleset_add(fd, ruleset_name, rl, &rule_id);
-		break;
-	case NPF_CMD_RULE_REMKEY:
-		rl = npfctl_parse_rule(argc, argv);
-		npfctl_generate_key(rl, key);
-		error = npf_ruleset_remkey(fd, ruleset_name, key, sizeof(key));
-		break;
-	case NPF_CMD_RULE_REMOVE:
-		rule_id = strtoull(argv[0], NULL, 16);
-		error = npf_ruleset_remove(fd, ruleset_name, rule_id);
-		break;
-	case NPF_CMD_RULE_LIST:
-		error = npfctl_ruleset_show(fd, ruleset_name);
-		break;
-	case NPF_CMD_RULE_FLUSH:
-		error = npf_ruleset_flush(fd, ruleset_name);
-		break;
-	default:
-		abort();
-	}
-
-	switch (error) {
-	case 0:
-		/* Success. */
-		break;
-	case ESRCH:
-		errx(EXIT_FAILURE, "ruleset \"%s\" not found", ruleset_name);
-	case ENOENT:
-		errx(EXIT_FAILURE, "rule was not found");
-	default:
-		errx(EXIT_FAILURE, "rule operation: %s", strerror(error));
-	}
-	if (action == NPF_CMD_RULE_ADD) {
-		printf("OK %" PRIx64 "\n", rule_id);
-	}
-	exit(EXIT_SUCCESS);
 }
 
 static bool bpfjit = true;
@@ -558,7 +288,7 @@ npfctl_load(int fd)
 
 	/*
 	 * The file may change while reading - we are not handling this,
-	 * leaving this responsibility for the caller.
+	 * just leaving this responsibility for the caller.
 	 */
 	if (stat(NPF_DB_PATH, &sb) == -1) {
 		err(EXIT_FAILURE, "stat");
@@ -566,8 +296,8 @@ npfctl_load(int fd)
 	if ((blen = sb.st_size) == 0) {
 		err(EXIT_FAILURE, "saved configuration file is empty");
 	}
-	if ((blob = mmap(NULL, blen, PROT_READ,
-	    MAP_FILE | MAP_PRIVATE, fd, 0)) == MAP_FAILED) {
+	blob = mmap(NULL, blen, PROT_READ, MAP_FILE | MAP_PRIVATE, fd, 0);
+	if (blob == MAP_FAILED) {
 		err(EXIT_FAILURE, "mmap");
 	}
 	ncf = npf_config_import(blob, blen);
@@ -578,7 +308,7 @@ npfctl_load(int fd)
 
 	/*
 	 * Configuration imported - submit it now.
-	 **/
+	 */
 	errno = error = npf_config_submit(ncf, fd, &errinfo);
 	if (error) {
 		npfctl_print_error(&errinfo);
@@ -587,122 +317,32 @@ npfctl_load(int fd)
 	return error;
 }
 
-struct npf_conn_filter {
-	uint16_t	alen;
-	const char *	ifname;
-	bool		nat;
-	bool		wide;
-	bool		name;
-	int		width;
-	FILE *		fp;
-};
-
-static int
-npfctl_conn_print(unsigned alen, const npf_addr_t *a, const in_port_t *p,
-    const char *ifname, void *v)
-{
-	struct npf_conn_filter *fil = v;
-	FILE *fp = fil->fp;
-	char *src, *dst;
-
-	if (fil->ifname && strcmp(ifname, fil->ifname) != 0)
-		return 0;
-	if (fil->alen && alen != fil->alen)
-		return 0;
-	if (fil->nat && !p[2])
-		return 0;
-
-	int w = fil->width;
-	const char *fmt = fil->name ? "%A" :
-	    (alen == sizeof(struct in_addr) ? "%a" : "[%a]");
-	src = npfctl_print_addrmask(alen, fmt, &a[0], NPF_NO_NETMASK);
-	dst = npfctl_print_addrmask(alen, fmt, &a[1], NPF_NO_NETMASK);
-
-	if (fil->wide) {
-		fprintf(fp, "%s:%d %s:%d", src, p[0], dst, p[1]);
-	} else {
-		fprintf(fp, "%*.*s:%-5d %*.*s:%-5d", w, w, src, p[0],
-		    w, w, dst, p[1]);
-	}
-	free(src);
-	free(dst);
-	if (!p[2]) {
-		fputc('\n', fp);
-		return 1;
-	}
-	fprintf(fp, " via %s:%d\n", ifname, p[2]);
-	return 1;
-}
-
-static int
-npfctl_conn_list(int fd, int argc, char **argv)
-{
-	struct npf_conn_filter f;
-	int c, w, header = true;
-
-	memset(&f, 0, sizeof(f));
-	argc--;
-	argv++;
-
-	while ((c = getopt(argc, argv, "46hi:nNw")) != -1) {
-		switch (c) {
-		case '4':
-			f.alen = sizeof(struct in_addr);
-			break;
-		case '6':
-			f.alen = sizeof(struct in6_addr);
-			break;
-		case 'h':
-			header = false;
-			break;
-		case 'i':
-			f.ifname = optarg;
-			break;
-		case 'n':
-			f.nat = true;
-			break;
-		case 'N':
-			f.name = true;
-			break;
-		case 'w':
-			f.wide = true;
-			break;
-		default:
-			fprintf(stderr,
-			    "Usage: %s list [-46hnNw] [-i <ifname>]\n",
-			    getprogname());
-			exit(EXIT_FAILURE);
-		}
-	}
-	f.width = f.alen == sizeof(struct in_addr) ? 25 : 41;
-	w = f.width + 6;
-	f.fp = stdout;
-
-	if (header) {
-		fprintf(f.fp, "%*.*s %*.*s\n",
-		    w, w, "From address:port ", w, w, "To address:port ");
-	}
-	npf_conn_list(fd, npfctl_conn_print, &f);
-	return 0;
-}
-
 static int
 npfctl_open_dev(const char *path)
 {
-	int fd, kernver;
+	struct stat st;
+	int fd;
 
-	fd = open(path, O_RDONLY);
-	if (fd == -1) {
-		err(EXIT_FAILURE, "cannot open '%s'", path);
+	if (lstat(path, &st) == -1) {
+		err(EXIT_FAILURE, "fstat");
 	}
-	if (ioctl(fd, IOC_NPF_VERSION, &kernver) == -1) {
-		err(EXIT_FAILURE, "ioctl(IOC_NPF_VERSION)");
-	}
-	if (kernver != NPF_VERSION) {
-		errx(EXIT_FAILURE,
-		    "incompatible NPF interface version (%d, kernel %d)\n"
-		    "Hint: update %s?", NPF_VERSION, kernver, 
-		    kernver > NPF_VERSION ? "userland" : "kernel");
+	if (st.st_mode & S_IFMT) {
+		struct sockaddr_un addr;
+
+		if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+			err(EXIT_FAILURE, "socket");
+		}
+		memset(&addr, 0, sizeof(addr));
+		addr.sun_family = AF_UNIX;
+		strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+
+		if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == -1) {
+			err(EXIT_FAILURE, "connect");
+		}
+	} else {
+		if ((fd = open(path, O_RDONLY)) == -1) {
+			err(EXIT_FAILURE, "cannot open '%s'", path);
+		}
 	}
 	return fd;
 }
@@ -754,7 +394,11 @@ npfctl(int action, int argc, char **argv)
 			usage();
 		}
 		argv += 2;
-		npfctl_table(fd, argc, argv);
+		if (strcmp(argv[1], "replace") == 0) {
+			npfctl_table_replace(fd, argc, argv);
+		} else {
+			npfctl_table(fd, argc, argv);
+		}
 		break;
 	case NPFCTL_RULE:
 		if ((argc -= 2) < 2) {
@@ -809,6 +453,32 @@ npfctl(int action, int argc, char **argv)
 int
 main(int argc, char **argv)
 {
+	static const struct operations_s {
+		const char *		cmd;
+		int			action;
+	} operations[] = {
+		/* Start, stop, reload */
+		{	"start",	NPFCTL_START		},
+		{	"stop",		NPFCTL_STOP		},
+		{	"reload",	NPFCTL_RELOAD		},
+		{	"show",		NPFCTL_SHOWCONF,	},
+		{	"flush",	NPFCTL_FLUSH		},
+		/* Table */
+		{	"table",	NPFCTL_TABLE		},
+		/* Rule */
+		{	"rule",		NPFCTL_RULE		},
+		/* Stats */
+		{	"stats",	NPFCTL_STATS		},
+		/* Full state save/load */
+		{	"save",		NPFCTL_SAVE		},
+		{	"load",		NPFCTL_LOAD		},
+		{	"list",		NPFCTL_CONN_LIST	},
+		/* Misc. */
+		{	"valid",	NPFCTL_VALIDATE		},
+		{	"debug",	NPFCTL_DEBUG		},
+		/* --- */
+		{	NULL,		0			}
+	};
 	char *cmd;
 
 	if (argc < 2) {
@@ -820,8 +490,10 @@ main(int argc, char **argv)
 	/* Find and call the subroutine. */
 	for (int n = 0; operations[n].cmd != NULL; n++) {
 		const char *opcmd = operations[n].cmd;
-		if (strncmp(cmd, opcmd, strlen(opcmd)) != 0)
+
+		if (strncmp(cmd, opcmd, strlen(opcmd)) != 0) {
 			continue;
+		}
 		npfctl(operations[n].action, argc, argv);
 		return EXIT_SUCCESS;
 	}
