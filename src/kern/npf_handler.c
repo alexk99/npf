@@ -150,16 +150,16 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 {
 	nbuf_t nbuf_v[PKT_VEC_SIZE];
 	npf_cache_t npc_v[PKT_VEC_SIZE];
-	npf_conn_t* con_v[PKT_VEC_SIZE];
-	npf_rule_t* rl_v[PKT_VEC_SIZE];
-	npf_rproc_t* rp_v[PKT_VEC_SIZE];
+	npf_conn_t *con_v[PKT_VEC_SIZE];
+	npf_rule_t *rl_v[PKT_VEC_SIZE];
+	npf_rproc_t *rp_v[PKT_VEC_SIZE];
 	int error_v[PKT_VEC_SIZE];
 	int retfl_v[PKT_VEC_SIZE];
 	int decision_v[PKT_VEC_SIZE];
 	uint8_t next_step_v[PKT_VEC_SIZE];
 	uint8_t step = 1;
 	int i;
-	npf_conn_t** con;
+	npf_conn_t **con;
 
 	uint64_t destroyed_packets_bitfld = 0;
 
@@ -412,7 +412,9 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 */
 	npc = npc_v;
 	con = con_v;
-	for (i=0; i<vec_size; i++,npc++,con++) {
+	for (i = 0; i < vec_size; i++, npc++, con++) {
+		npf_conn_t *c;
+
 		/* skip destroyed packets or handle goto */
 		if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) || next_step_v[i] > step)
 			continue;
@@ -423,14 +425,11 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		 * Establish a "pass" connection, if required.  Just proceed if
 		 * connection creation fails (e.g. due to unsupported protocol).
 		 */
-		npf_conn_t* c = *con;
-
+		c = *con;
 		if ((retfl_v[i] & NPF_RULE_STATEFUL) != 0 && !c) {
-			dprintf2("npc_info step 4: %u\n", npc->npc_info);
+			if (npf_conn_establish(npc, di,
+				 (retfl_v[i] & NPF_RULE_MULTIENDS) == 0, &c) == 0) {
 
-			c = npf_conn_establish(npc, di,
-				 (retfl_v[i] & NPF_RULE_MULTIENDS) == 0);
-			if (c) {
 				/*
 				 * Note: the reference on the rule procedure is
 				 * transfered to the connection.  It will be
@@ -699,9 +698,8 @@ npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
 	 * connection creation fails (e.g. due to unsupported protocol).
 	 */
 	if ((retfl & NPF_RULE_STATEFUL) != 0 && !con) {
-		con = npf_conn_establish(&npc, di,
-		    (retfl & NPF_RULE_MULTIENDS) == 0);
-		if (con) {
+		if (npf_conn_establish(&npc, di,
+		    (retfl & NPF_RULE_MULTIENDS) == 0, &con) == 0) {
 			/*
 			 * Note: the reference on the rule procedure is
 			 * transfered to the connection.  It will be

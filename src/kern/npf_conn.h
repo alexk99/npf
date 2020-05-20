@@ -46,6 +46,7 @@ typedef struct npf_connkey_ipv6 npf_connkey_ipv6_t;
 #if defined(__NPF_CONN_PRIVATE)
 
 #include "npf_connkey.h"
+#include "npf_conn_limit.h"
 
 #define	CONN_ACTIVE	0x004	/* visible on inspection */
 #define	CONN_PASS	0x008	/* perform implicit passing */
@@ -60,13 +61,15 @@ typedef struct npf_connkey_ipv6 npf_connkey_ipv6_t;
  * Connection database
  */
 struct npf_conndb {
-	void* conn_map_ipv4;
-	void* conn_map_ipv6;
+	void *conn_map_ipv4;
+	void *conn_map_ipv6;
 	npf_conn_t *		cd_recent;
 	npf_conn_t *		cd_list;
 	npf_conn_t *		cd_tail;
 	uint32_t		cd_seed;
-
+	
+	npf_conn_limit_t *	conn_limit;
+	
 	/* asyn gc states */
 	npf_conn_t *		gc_con;
 	npf_conn_t *		gc_prev;
@@ -212,7 +215,9 @@ npf_conn_t *
 npf_conn_inspect_part2(npf_conn_t* con, npf_cache_t *npc, const void* key,
 		  uint64_t hv, const int di);
 
-npf_conn_t *	npf_conn_establish(npf_cache_t *, int, bool);
+int
+npf_conn_establish(npf_cache_t *, int, bool, npf_conn_t **);
+
 void		npf_conn_release(npf_conn_t *);
 void		npf_conn_expire(npf_conn_t *);
 bool		npf_conn_pass(const npf_conn_t *, npf_rproc_t **);

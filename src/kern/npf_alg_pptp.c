@@ -208,8 +208,7 @@ npfa_pptp_gre_establish_gre_conn(npf_cache_t *npc, int di,
 			  gre_con->flags);
 
 	/* establish new gre connection state */
-	con = npf_conn_establish(npc, di, true);
-	if (con == NULL) {
+	if (npf_conn_establish(npc, di, true, &con) != 0) {
 		NPF_DPRINTFCL(NPF_DC_PPTP_ALG, 50,
 				  "failed to establish pptp gre connection\n");
 		return ENOMEM;

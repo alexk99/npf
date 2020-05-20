@@ -124,7 +124,7 @@ OBJS+=		stand/murmurhash.o stand/subr_hash.o
 OBJS+=		stand/mempool.o stand/tls_pth.o
 OBJS+=		npf_portmap.o
 OBJS+=		npf_conn_map.o npf_conn_map_ipv6.o npf_city_hasher.o
-OBJS+=		npf_conn_debug.o thmap.o npf_conn_thmap.o
+OBJS+=		npf_conn_debug.o thmap.o npf_conn_thmap.o npf_conn_limit.o
 #
 # Flags for the library target
 #

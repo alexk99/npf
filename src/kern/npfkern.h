@@ -134,4 +134,31 @@ void npf_conndb_set_event_conndb_iter_state(npf_t * npf,
 void npf_conndb_set_event_conndb_iter_process_conn(npf_t * npf,
 	npf_nat_event_conndb_iter_process_conn_cb_t cb);
 
+/* 
+ * NAT limits
+ */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+void 
+npf_nat_conn_limit_params_set(npf_t *npf,
+	uint8_t group_by, uint8_t filter_mode, uint32_t default_max_conns);
+void 
+npf_nat_conn_limit_params_get(npf_t *npf,
+	uint8_t *group_by, uint8_t *filter_mode, uint32_t *default_max_conns);
+int
+npf_nat_conn_limit_filter_add(npf_t *npf, uint32_t net, uint8_t mask);
+int
+npf_nat_conn_limit_filter_del(npf_t *npf, uint32_t net, uint8_t mask);
+bool
+npf_nat_conn_limit_get(npf_t *npf, uint32_t ip, uint32_t *max_conns,
+		  uint32_t *nb_conns);
+void
+npf_nat_conn_limit_set(npf_t *npf, uint32_t ip, uint32_t max_conns);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

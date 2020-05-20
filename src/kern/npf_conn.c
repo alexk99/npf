@@ -710,9 +710,13 @@ extern uint64_t g_debug_counter;
  *
  * => Connection is created with the reference held for the caller.
  * => Connection will be activated on the first reference release.
+ *
+ * Returns:
+ *   0 - success
+ *  <0 - failure
  */
-npf_conn_t *
-npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
+int
+npf_conn_establish(npf_cache_t *npc, int di, bool per_if, npf_conn_t **out_con)
 {
 	npf_t *npf = npc->npc_ctx;
 	const nbuf_t *nbuf = npc->npc_nbuf;
@@ -729,10 +733,8 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 
 	KASSERT(!nbuf_flag_p(nbuf, NBUF_DATAREF_RESET));
 
-	if (unlikely(!npf_conn_trackable_p(npc))) {
-		NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 70, "conn is not trackable\n");
-		return NULL;
-	}
+	if (unlikely(!npf_conn_trackable_p(npc)))
+		return -EOPNOTSUPP;
 
 	/* Determine the type of a connection (ipv4 or ipv6) and set its flag
 	 * accordingly
@@ -753,7 +755,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 	con = pool_cache_get(con_pool, PR_NOWAIT);
 	if (unlikely(!con)) {
 		npf_worker_signal(npf);
-		return NULL;
+		return -1;
 	}
 	NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 70,
 			  "NPF: create conn %p\n", con);
@@ -770,19 +772,19 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 		NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 30,
 				  "npf_conn_establish() failed: state_init() failed\n");
 		npf_log(NPF_LOG_CONN, "npf_conn_establish() failed: state_init() failed");
-		return NULL;
+		return -2;
 	}
 
 	KASSERT(npf_iscached(npc, NPC_IP46));
 
 	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
-		con_ipv4 = (npf_conn_ipv4_t*) con;
+		con_ipv4 = (npf_conn_ipv4_t *)con;
 		fw = con_ipv4->c_forw_entry.ck_key;
 		bk = con_ipv4->c_back_entry.ck_key;
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
 	}
 	else {
-		con_ipv6 = (npf_conn_ipv6_t*) con;
+		con_ipv6 = (npf_conn_ipv6_t *)con;
 		fw = con_ipv6->c_forw_entry.ck_key;
 		bk = con_ipv6->c_back_entry.ck_key;
 		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
@@ -799,11 +801,17 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if)
 		npf_conn_destroy(npc, npf, con);
 		npf_log(NPF_LOG_CONN,
 				  "npf_conn_establish() failed: could not create a connection key");
-		return NULL;
+		return -3;
 	}
 
 	con->c_ifid = per_if ? nbuf->nb_ifid : 0;
 	con->c_proto = npc->npc_proto;
+
+	/* limit the connections */
+	if (npc->npc_alen == sizeof(in_addr_t) &&
+			  !npf_conn_limit(npf->conn_db->conn_limit, con_ipv4,
+					CONN_LIMIT_ACT_INC))
+		return -ECONNREFUSED;
 
 	/*
 	 * Set last activity time for a new connection and acquire
@@ -869,13 +877,23 @@ err:
 	npf_conndb_enqueue(npf->conn_db, con);
 	npf_lock_exit(&con->c_lock);
 
-	return error ? NULL : con;
+	if (error == 0) {
+		*out_con = con;
+		return 0;
+	}
+	else
+		return error;
 }
 
 static void
 npf_conn_destroy(npf_cache_t *npc, npf_t *npf, npf_conn_t *con)
 {
 	dprintf("npf_conn_destroy\n");
+
+	/* keep track of connection limits */
+	if (con->c_flags & CONN_IPV4)
+		npf_conn_limit(npf->conn_db->conn_limit, (npf_conn_ipv4_t *)con,
+				  CONN_LIMIT_ACT_DEC);
 
 	if (con->c_nat) {
 		/* Release any NAT structures. */

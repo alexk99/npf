@@ -860,10 +860,8 @@ npf_do_nat(npf_cache_t *npc, npf_conn_t *con, const int di)
 	 * "backwards" stream depends on other, stateless filtering rules.
 	 */
 	if (unlikely(con == NULL)) {
-		ncon = npf_conn_establish(npc, di, true);
-		if (ncon == NULL) {
+		if (npf_conn_establish(npc, di, true, &ncon) != 0) {
 			npf_natpolicy_release(np);
-			dprintf("npf_conn_establish() failed\n");
 			return ENOMEM;
 		}
 		con = ncon;

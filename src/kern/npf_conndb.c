@@ -53,6 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: npf_conndb.c,v 1.2 2014/07/23 01:25:34 rmind Exp $")
 #include "npf_conn_map_ipv6.h"
 #include "npf_city_hasher.h"
 #include "likely.h"
+#include "npf_conn_limit.h"
 
 #ifdef NPF_DEBUG_COUNTERS
 extern uint64_t g_debug_counter;
@@ -97,6 +98,7 @@ npf_conndb_create(void)
 
 	cd->cd_seed = cprng_fast32();
 	cd->conn_map_ipv4 = npf_conn_map_init();
+	cd->conn_limit = npf_conn_limit_init();
 	cd->conn_map_ipv6 = npf_conn_map_ipv6_init();
 	cd->gc_state = NPF_GC_STATE_START;
 	cd->cd_tail_valid = true;
@@ -109,6 +111,7 @@ npf_conndb_destroy(npf_conndb_t *cd)
 {
 	npf_conn_map_fini(cd->conn_map_ipv4);
 	npf_conn_map_ipv6_fini(cd->conn_map_ipv6);
+	npf_conn_limit_fini(cd->conn_limit);
 
 	size_t len = sizeof(npf_conndb_t);
 
