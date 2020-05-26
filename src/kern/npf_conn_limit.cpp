@@ -90,7 +90,7 @@ npf_conn_limit_map_inc(void *map, const uint32_t ip,
 	
 	try {
 		auto fn = [&res](npf_conn_limit_group_t &group) {
-			if (group.nb_connections > group.max_connections)
+			if (group.nb_connections >= group.max_connections)
 				res = false;
 			else {
 				group.nb_connections++;

@@ -158,7 +158,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	int decision_v[PKT_VEC_SIZE];
 	uint8_t next_step_v[PKT_VEC_SIZE];
 	uint8_t step = 1;
-	int i;
+	int i, ret;
 	npf_conn_t **con;
 
 	uint64_t destroyed_packets_bitfld = 0;
@@ -427,9 +427,9 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		 */
 		c = *con;
 		if ((retfl_v[i] & NPF_RULE_STATEFUL) != 0 && !c) {
-			if (npf_conn_establish(npc, di,
-				 (retfl_v[i] & NPF_RULE_MULTIENDS) == 0, &c) == 0) {
-
+			ret = npf_conn_establish(npc, di,
+					  (retfl_v[i] & NPF_RULE_MULTIENDS) == 0, &c);
+			if (ret == 0) {
 				/*
 				 * Note: the reference on the rule procedure is
 				 * transfered to the connection.  It will be
@@ -438,6 +438,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 				npf_conn_setpass(c, rp_v[i]);
 				*con = c;
 			}
+			else if (ret == -ECONNREFUSED)
+				next_step_v[i] = PH_STEP_BLOCK;
 		}
 	}
 	step++;
