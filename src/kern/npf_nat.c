@@ -589,29 +589,28 @@ npf_nat_create(npf_cache_t *npc, npf_natpolicy_t *np, npf_conn_t *con)
 	}
 
 	/* init translation address */
-	if ((np->n_flags & NPF_NAT_PORTMAP) != 0) {
-		if ((np->n_flags & NPF_NAT_NETMAP) != 0) {
-			/* calculate a translation ip
-			 *
-			 * The final translation address will be
-			 * constructed based on packet's src ip addr and translation ip/mask
-			 * in the following way:
-			 *	translation_ip & mask | packet_src_ip & ~mask
-			 */
-			uint32_t mask = htonl(0xffffffff << (32 - nt->nt_natpolicy->n_tmask));
-			uint32_t taddr = (nt->nt_natpolicy->n_taddr.word32[0] & mask) |
-				(npc->npc_ips[0]->word32[0] & (~mask));
-			nt->nt_taddr.word32[0] = taddr;
+	if ((np->n_flags & (NPF_NAT_PORTMAP | NPF_NAT_NETMAP)) ==
+			  (NPF_NAT_PORTMAP | NPF_NAT_NETMAP)) {
+		/* calculate a translation ip
+		 *
+		 * The final translation address will be
+		 * constructed based on packet's src ip addr and translation ip/mask
+		 * in the following way:
+		 *	translation_ip & mask | packet_src_ip & ~mask
+		 */
+		uint32_t mask = htonl(0xffffffff << (32 - nt->nt_natpolicy->n_tmask));
+		uint32_t taddr = (nt->nt_natpolicy->n_taddr.word32[0] & mask) |
+			(npc->npc_ips[0]->word32[0] & (~mask));
+		nt->nt_taddr.word32[0] = taddr;
 
-			dprintf("netmap: taddr %u, src addr %u, mask %u, res %u\n",
-				nt->nt_natpolicy->n_taddr.word32[0],
-				npc->npc_ips[0]->word32[0],
-				nt->nt_natpolicy->n_tmask,
-				taddr);
-		}
-		else {
-			nt->nt_taddr = np->n_taddr;
-		}
+		dprintf("netmap: taddr %u, src addr %u, mask %u, res %u\n",
+			nt->nt_natpolicy->n_taddr.word32[0],
+			npc->npc_ips[0]->word32[0],
+			nt->nt_natpolicy->n_tmask,
+			taddr);
+	}
+	else {
+		nt->nt_taddr = np->n_taddr;
 	}
 
 	/*
