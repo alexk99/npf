@@ -67,7 +67,7 @@ MODULE(MODULE_CLASS_MISC, npf_alg_icmp, "npf");
 #define	TR_PORT_RANGE	33484
 #define	TR_MAX_TTL	48
 
-static npf_alg_t *	alg_icmp	__read_mostly;
+static npf_alg_t *	alg_icmp = NULL	__read_mostly;
 
 /*
  * npfa_icmp_match: matching inspector determines ALG case and associates
@@ -436,7 +436,9 @@ npf_alg_icmp_init(npf_t *npf)
 		.inspect	= npfa_icmp_conn,
 		.destroy = NULL,
 	};
-	alg_icmp = npf_alg_register(npf, "icmp", &icmp);
+
+	if (alg_icmp == NULL)
+		alg_icmp = npf_alg_register(npf, "icmp", &icmp);
 	return alg_icmp ? 0 : ENOMEM;
 }
 

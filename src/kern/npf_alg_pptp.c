@@ -64,10 +64,10 @@ MODULE(MODULE_CLASS_MISC, npf_alg_pptp, "npf");
 
 #define	PPTP_SERVER_PORT	1723
 
-static npf_alg_t *	alg_pptp_tcp	__read_mostly;
-static npf_alg_t *	alg_pptp_gre	__read_mostly;
+static npf_alg_t *	alg_pptp_tcp = NULL	__read_mostly;
+static npf_alg_t *	alg_pptp_gre = NULL	__read_mostly;
 
-static npf_portmap_hash_t *alg_pptp_portmap_hash;
+static npf_portmap_hash_t *alg_pptp_portmap_hash = NULL;
 
 /* PPTP messages types */
 #define PPTP_CTRL_MSG 1
@@ -800,15 +800,18 @@ npf_alg_pptp_init(npf_t *npf)
 		.destroy   = npfa_pptp_gre_destroy,
 	};
 
-	alg_pptp_portmap_hash = npf_portmap_init();
+	if (alg_pptp_portmap_hash == NULL)
+		alg_pptp_portmap_hash = npf_portmap_init();
 	if (alg_pptp_portmap_hash == NULL)
 		return ENOMEM;
 
-	alg_pptp_tcp = npf_alg_register(npf, "pptp_tcp", &pptp_tcp);
+	if (alg_pptp_tcp == NULL)
+		alg_pptp_tcp = npf_alg_register(npf, "pptp_tcp", &pptp_tcp);
 	if (alg_pptp_tcp == NULL)
 		return ENOMEM;
 
-	alg_pptp_gre = npf_alg_register(npf, "pptp_gre", &pptp_gre);
+	if (alg_pptp_gre == NULL)
+		alg_pptp_gre = npf_alg_register(npf, "pptp_gre", &pptp_gre);
 	if (alg_pptp_tcp == NULL) {
 		npf_alg_unregister(npf, alg_pptp_tcp);
 		return ENOMEM;
