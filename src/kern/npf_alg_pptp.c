@@ -812,7 +812,7 @@ npf_alg_pptp_init(npf_t *npf)
 
 	if (alg_pptp_gre == NULL)
 		alg_pptp_gre = npf_alg_register(npf, "pptp_gre", &pptp_gre);
-	if (alg_pptp_tcp == NULL) {
+	if (alg_pptp_gre == NULL) {
 		npf_alg_unregister(npf, alg_pptp_tcp);
 		return ENOMEM;
 	} else {
