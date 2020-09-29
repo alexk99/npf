@@ -475,7 +475,9 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 		dprintf("%s key not found\n", pref);
 		return NULL;
 	}
-	KASSERT(npc->npc_proto == con->c_proto);
+
+	if (unlikely(npc->npc_proto != con->c_proto))
+		return NULL;
 
 	/* Check if connection is active and not expired. */
 	u_int flags = con->c_flags;
@@ -549,7 +551,8 @@ npf_conn_lookup_part2(npf_conn_t *con, const npf_cache_t *npc,
 
 	*forw = npf_conndb_forw(con, key, key_nwords, hv);
 
-	KASSERT(npc->npc_proto == con->c_proto);
+	if (unlikely(npc->npc_proto != con->c_proto))
+		return NULL;
 
 	/* Check if connection is active and not expired. */
 	u_int flags = con->c_flags;

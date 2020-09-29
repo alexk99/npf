@@ -621,7 +621,6 @@ fail:
 	/*
 	 * Note: destroy rulesets first, to drop references to the tableset.
 	 */
-	KASSERT(error == 0 || (nset || rpset || rlset || tblset));
 	if (nset) {
 		npf_ruleset_destroy(nset);
 	}
