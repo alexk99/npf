@@ -204,7 +204,7 @@ npfkern_pthread_create(lwp_t **lret, void (*func)(void *), void *arg)
 	if ((l = (lwp_t *) calloc(1, sizeof(lwp_t))) == NULL)
 		return ENOMEM;
 	*lret = l;
-	return pthread_create(&l->thr, NULL, (void *(*)(void *))func, arg);
+	return pthread_create(&l->thr, NULL, (void *(*)(void *))(void *)func, arg);
 }
 
 #define	kthread_create(pri, flags, ci, func, arg, thr, fmt) \
