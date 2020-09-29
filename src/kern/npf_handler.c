@@ -143,10 +143,10 @@ typedef void *	(*mbuf_getdata_cb_t)(const struct mbuf *);
  */
 __dso_public bool
 npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
-		  uint8_t** mbuf_data_ptr_v,
-		  ifnet_t **ifp_v, uint8_t* l2_size_v, int di, __time_t sec,
-		  uint8_t cpu_thread, uint16_t* ret_v,
-		  uint64_t* out_destroyed_packets_bitfld)
+		  uint8_t **mbuf_data_ptr_v,
+		  ifnet_t **ifp_v, uint8_t *l2_size_v, int di, __time_t sec,
+		  uint8_t cpu_thread, uint16_t *ret_v,
+		  uint64_t *out_destroyed_packets_bitfld)
 {
 	nbuf_t nbuf_v[PKT_VEC_SIZE];
 	npf_cache_t npc_v[PKT_VEC_SIZE];
@@ -157,11 +157,13 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	int retfl_v[PKT_VEC_SIZE];
 	int decision_v[PKT_VEC_SIZE];
 	uint8_t next_step_v[PKT_VEC_SIZE];
-	uint8_t step = 1;
+	uint8_t step;
+	bool errors;
 	int i, ret;
 	npf_conn_t **con;
-
-	uint64_t destroyed_packets_bitfld = 0;
+	npf_cache_t *npc;
+	nbuf_t *nbuf;
+	uint64_t destroyed_packets_bitfld;
 
 	/* QSBR checkpoint. */
 	pserialize_checkpoint(npf->qsbr);
@@ -173,24 +175,30 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 * set errors to false, indicating that there is no need no
 	 * to check return values for each packet
 	 */
-	bool errors = false;
+	errors = false;
+
+	/*
+	 * init next_step
+	 * 0 means than next step is undefined (not used)
+	 */
 	memset(next_step_v, 0, PKT_VEC_SIZE);
+	destroyed_packets_bitfld = 0;
+	
 
 	/*
 	 * step 1
 	 * Initialize npf cache
 	 */
-	npf_cache_t* npc = npc_v;
-	nbuf_t* nbuf = nbuf_v;
-	for (i=0; i<vec_size; i++,npc++,nbuf++) {
-		/* init next_step
-		 * 0 means than next step is undefined (not used)
-		 */
-		dprintf(" -- step %d -- \n", step);
-
-		struct mbuf* mp = m_v[i];
+	step = 1;
+	npc = npc_v;
+	nbuf = nbuf_v;
+	
+	for (i = 0; i < vec_size; i++, npc++, nbuf++) {
 		uint8_t l2_size = l2_size_v[i];
+		struct mbuf *mp = m_v[i];
 		ifnet_t *ifp = ifp_v[i];
+
+		dprintf(" -- step %d -- \n", step);
 
 		/*
 		 * Initialise packet information cache.
@@ -231,10 +239,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		}
 
 		dprintf2("npc_info: %u\n", npc->npc_info);
-
 		dprintf2("npc src ip %d, dst %d\n", npc->npc_ip.v4->ip_src.s_addr,
 				  npc->npc_ip.v4->ip_dst.s_addr);
-
 	}
 
 	step++;
@@ -249,19 +255,19 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		uint32_t conn_key_buf[NPF_CONN_IPV6_KEYLEN_WORDS * PKT_VEC_SIZE];
 		uint64_t conn_hash_v[PKT_VEC_SIZE];
 
-		uint64_t* conn_hash = conn_hash_v;
-		uint32_t* conn_key_ptr = conn_key_buf;
+		uint64_t *conn_hash = conn_hash_v;
+		uint32_t *conn_key_ptr = conn_key_buf;
 		bool conn_found = false;
 		int ret;
 		uint32_t already_inspected_connections = 0;
 
 		/* num bits in already_inspected_connections == PKT_VEC_SIZE */
-		KASSERT((sizeof(already_inspected_connections) << 3) == PKT_VEC_SIZE);
+		CTASSERT((sizeof(already_inspected_connections) << 3) == PKT_VEC_SIZE);
 
 		con = con_v;
 		npc = npc_v;
-		for (i=0; i<vec_size; i++,npc++,conn_hash++,con++,
-				  conn_key_ptr+=NPF_CONN_IPV6_KEYLEN_WORDS) {
+		for (i = 0; i < vec_size; i++, npc++, conn_hash++, con++,
+				  conn_key_ptr += NPF_CONN_IPV6_KEYLEN_WORDS) {
 			/* skip freed packets or handle goto */
 			if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) ||
 					  next_step_v[i] > step)
@@ -305,8 +311,8 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 			con = con_v;
 			conn_key_ptr = conn_key_buf;
 
-			for (i=0; i<vec_size; i++,npc++,conn_hash++,con++,
-					  conn_key_ptr+=NPF_CONN_IPV6_KEYLEN_WORDS) {
+			for (i = 0; i < vec_size; i++, npc++, conn_hash++, con++,
+					  conn_key_ptr += NPF_CONN_IPV6_KEYLEN_WORDS) {
 				/* skip already inspected connections,
 				 * skip freed packets or handle goto
 				 */
@@ -332,7 +338,9 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 */
 	npc = npc_v;
 	con = con_v;
-	for (i=0; i<vec_size; i++,npc++,con++) {
+	for (i = 0; i < vec_size; i++, npc++, con++) {
+		npf_rule_t *rl;
+
 		/* skip destroyed packets or handle goto */
 		if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) || next_step_v[i] > step)
 			continue;
@@ -365,7 +373,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		dprintf("conn: %p\n", *con);
 		dprintf("rule inspect\n");
 
-		npf_rule_t* rl = npf_ruleset_inspect(npc, rlset, di, NPF_LAYER_3);
+		rl = npf_ruleset_inspect(npc, rlset, di, NPF_LAYER_3);
 		rl_v[i] = rl;
 		if (unlikely(rl == NULL)) {
 			const bool pass = npf_default_pass(npf);
@@ -450,7 +458,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 */
 	npc = npc_v;
 	con = con_v;
-	for (i=0; i<vec_size; i++,npc++,con++) {
+	for (i = 0; i < vec_size; i++, npc++, con++) {
 		/* skip destroyed packets or handle goto */
 		if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) || next_step_v[i] > step)
 			continue;
@@ -475,7 +483,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	 */
 	npc = npc_v;
 	con = con_v;
-	for (i=0; i<vec_size; i++,npc++,con++) {
+	for (i = 0; i < vec_size; i++, npc++, con++) {
 		/* skip destroyed packets or handle goto */
 		if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) || next_step_v[i] > step)
 			continue;
@@ -506,7 +514,7 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 	npc = npc_v;
 	nbuf = nbuf_v;
 	con = con_v;
-	for (i=0; i<vec_size; i++,npc++,con++,nbuf++) {
+	for (i = 0; i < vec_size; i++, npc++, con++, nbuf++) {
 		/* skip destroyed packets or handle goto */
 		if (IS_PKT_DESROYED(destroyed_packets_bitfld, i) || next_step_v[i] > step)
 			continue;

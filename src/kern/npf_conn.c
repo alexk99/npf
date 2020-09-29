@@ -299,8 +299,9 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 			id[NPF_DST] = ic->icmp_id;
 			break;
 		}
-		dprintf("icmp is not chached\n");
+		dprintf("icmp is not cached\n");
 		return 0;
+
 	case IPPROTO_ICMPV6:
 		if (npf_iscached(npc, NPC_ICMP_ID)) {
 			const struct icmp6_hdr *ic6 = npc->npc_l4.icmp6;
@@ -309,6 +310,7 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 			break;
 		}
 		return 0;
+
 	case IPPROTO_GRE:
 		KASSERT(npf_iscached(npc, NPC_ALG_PPTP_GRE | NPC_ALG_PPTP_GRE_CTX));
 		if (npf_iscached(npc, NPC_ALG_PPTP_GRE_CTX)) {
@@ -340,6 +342,7 @@ npf_conn_conkey(const npf_cache_t *npc, uint32_t *key, const bool forw)
 					  id[NPF_SRC], id[NPF_DST], forw);
 		}
 		break;
+
 	default:
 		/* Unsupported protocol. */
 		return 0;
@@ -443,24 +446,23 @@ conn_update_atime_now(npf_conn_t *con)
 npf_conn_t *
 npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 {
+	/* note: ipv6 key type can be used for both ipv4 and ipv6 connections */
+	npf_connkey_ipv6_t key;
+	uint32_t *k;
+	npf_conn_t *con;
 	npf_t *npf = npc->npc_ctx;
 	u_int key_nwords;
 
-	if (likely(npc->npc_alen == sizeof(in_addr_t))) {
+	if (likely(npc->npc_alen == sizeof(in_addr_t)))
 		key_nwords = NPF_CONN_IPV4_KEYLEN_WORDS;
-	}
-	else {
+	else
 		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
-	}
 
-	/* note: ipv6 key type can be used for both ipv4 and ipv6 connections */
-	npf_connkey_ipv6_t key;
-	uint32_t* k = &key.ck_key[0];
+	k = &key.ck_key[0];
 
 	/* Construct a key and lookup for a connection in the store. */
-	if (unlikely(!npf_conn_conkey(npc, k, true))) {
+	if (unlikely(!npf_conn_conkey(npc, k, true)))
 		return NULL;
-	}
 
 #ifdef ALEXK_DEBUG
 	char pref[256];
@@ -468,7 +470,7 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 	npf_conn_conkey_print(k, pref);
 #endif
 
-	npf_conn_t* con = npf_conndb_lookup(npf->conn_db, k, key_nwords, forw);
+	con = npf_conndb_lookup(npf->conn_db, k, key_nwords, forw);
 	if (con == NULL) {
 		dprintf("%s key not found\n", pref);
 		return NULL;
@@ -510,11 +512,12 @@ npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw)
 	return con;
 }
 
-npf_conn_t*
-npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t* con_key, uint64_t* out_hv)
+npf_conn_t *
+npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t *con_key,
+		  uint64_t *out_hv)
 {
 	npf_t *npf = npc->npc_ctx;
-	npf_conndb_t* conndb = npf->conn_db;
+	npf_conndb_t *conndb = npf->conn_db;
 	u_int key_nwords;
 
 	if (likely(npc->npc_alen == sizeof(in_addr_t)))
@@ -535,8 +538,8 @@ npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t* con_key, uint64_t* out_h
  * => If found, we will hold a reference for the caller.
  */
 npf_conn_t *
-npf_conn_lookup_part2(npf_conn_t* con, const npf_cache_t* npc,
-		  const void* key, uint64_t hv, const int di, bool* forw)
+npf_conn_lookup_part2(npf_conn_t *con, const npf_cache_t *npc,
+		  const void *key, uint64_t hv, const int di, bool *forw)
 {
 	u_int key_nwords;
 	if (likely(npc->npc_alen == sizeof(in_addr_t)))
@@ -638,8 +641,8 @@ npf_conn_inspect(npf_cache_t *npc, const int di, int *error)
  * < 0 - error
  */
 int
-npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
-		  npf_conn_t** out_con, uint64_t* out_conn_hash)
+npf_conn_inspect_part1(npf_cache_t *npc, uint32_t *con_key, const int di,
+		  npf_conn_t **out_con, uint64_t *out_conn_hash)
 {
 	nbuf_t *nbuf = npc->npc_nbuf;
 	npf_conn_t *con;
@@ -679,7 +682,7 @@ npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
  * => If found, we will hold a reference for the caller.
  */
 npf_conn_t *
-npf_conn_inspect_part2(npf_conn_t* con, npf_cache_t *npc, const void* key,
+npf_conn_inspect_part2(npf_conn_t *con, npf_cache_t *npc, const void *key,
 		  uint64_t hv, const int di)
 {
 	bool forw;

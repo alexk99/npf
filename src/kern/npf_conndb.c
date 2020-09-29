@@ -126,12 +126,12 @@ npf_conndb_destroy(npf_conndb_t *cd)
  *
  */
 uint64_t
-npf_conndb_hash(npf_conndb_t* cd, const void* key, const u_int key_nwords)
+npf_conndb_hash(npf_conndb_t *cd, const void *key, const u_int key_nwords)
 {
 	/* return murmurhash2(key->ck_key, NPF_CONN_KEYLEN(key), cd->cd_seed); */
 
 	(void) cd;
-	return npf_city_hash((const char*) key, key_nwords << 2);
+	return npf_city_hash((const char *)key, key_nwords << 2);
 }
 
 /*
@@ -184,15 +184,15 @@ npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
  */
 npf_conn_t *
 npf_conndb_lookup_only(npf_conndb_t *cd, const void *key,
-		  const u_int key_nwords, uint64_t* out_hv)
+		  const u_int key_nwords, uint64_t *out_hv)
 {
-	npf_conn_t* con;
+	npf_conn_t *con;
 	const uint64_t hv = npf_conndb_hash(cd, key, key_nwords);
 
 	if (likely(key_nwords == NPF_CONN_IPV4_KEYLEN_WORDS))
-		con = (npf_conn_t*) npf_conn_map_lookup(cd->conn_map_ipv4, key);
+		con = (npf_conn_t *)npf_conn_map_lookup(cd->conn_map_ipv4, key);
 	else
-		con = (npf_conn_t*) npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key);
+		con = (npf_conn_t *)npf_conn_map_ipv6_lookup(cd->conn_map_ipv6, key);
 
 	if (con == NULL)
 		return NULL;

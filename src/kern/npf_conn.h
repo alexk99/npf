@@ -191,28 +191,28 @@ npf_conn_init_ipv4_key(void *, uint16_t, uint16_t, uint16_t, uint32_t,
 		  uint32_t);
 
 void
-npf_conn_conkey_print(uint32_t *key, const char* pref);
+npf_conn_conkey_print(uint32_t *key, const char *pref);
 
 npf_conn_t *
 npf_conn_lookup(const npf_cache_t *npc, const int di, bool *forw);
 
-npf_conn_t*
-npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t* con_key,
-		  uint64_t* out_hv);
+npf_conn_t *
+npf_conn_lookup_part1(const npf_cache_t *npc, uint32_t *con_key,
+		  uint64_t *out_hv);
 
 npf_conn_t *
-npf_conn_lookup_part2(npf_conn_t* con, const npf_cache_t* npc,
-		  const void* key, uint64_t hv, const int di, bool* forw);
+npf_conn_lookup_part2(npf_conn_t *con, const npf_cache_t *npc,
+		  const void *key, uint64_t hv, const int di, bool *forw);
 
 npf_conn_t *
 npf_conn_inspect(npf_cache_t *npc, const int di, int *error);
 
 int
-npf_conn_inspect_part1(npf_cache_t *npc, uint32_t* con_key, const int di,
-		  npf_conn_t** out_con, uint64_t* out_conn_hash);
+npf_conn_inspect_part1(npf_cache_t *npc, uint32_t *con_key, const int di,
+		  npf_conn_t **out_con, uint64_t *out_conn_hash);
 
 npf_conn_t *
-npf_conn_inspect_part2(npf_conn_t* con, npf_cache_t *npc, const void* key,
+npf_conn_inspect_part2(npf_conn_t *con, npf_cache_t *npc, const void *key,
 		  uint64_t hv, const int di);
 
 int
@@ -242,21 +242,21 @@ void		npf_conndb_destroy(npf_conndb_t *);
 uint64_t npf_conndb_ipv4_size(npf_conndb_t *);
 uint64_t npf_conndb_ipv6_size(npf_conndb_t *);
 
-uint64_t npf_conndb_hash(npf_conndb_t*, const void*, const u_int);
+uint64_t npf_conndb_hash(npf_conndb_t *, const void *, const u_int);
 
 npf_conn_t *
 npf_conndb_lookup(npf_conndb_t *cd, const void *key, const u_int key_nwords,
 		  bool *forw);
 
 npf_conn_t *
-npf_conndb_lookup_only(npf_conndb_t *, const void *, const u_int, uint64_t*);
+npf_conndb_lookup_only(npf_conndb_t *, const void *, const u_int, uint64_t *);
 
 bool
-npf_conndb_forw(npf_conn_t* con, const void *key, const u_int key_nwords,
+npf_conndb_forw(npf_conn_t *con, const void *key, const u_int key_nwords,
 		  const uint64_t hv);
 
 uint64_t
-npf_conndb_size(npf_conndb_t* cd, const u_int key_nwords);
+npf_conndb_size(npf_conndb_t *cd, const u_int key_nwords);
 
 bool
 npf_conndb_insert(npf_conndb_t *, void *, const u_int, npf_conn_t *);

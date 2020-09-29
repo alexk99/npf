@@ -97,10 +97,10 @@ void	npf_thread_register(npf_t *);
 
 bool
 npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
-		  uint8_t** mbuf_data_ptr_v,
-		  ifnet_t **ifp_v, uint8_t* l2_size_v, int di, __time_t sec,
-		  uint8_t cpu_thread, uint16_t* ret_v,
-		  uint64_t* out_destroyed_packets_bitfld);
+		  uint8_t **mbuf_data_ptr_v,
+		  ifnet_t **ifp_v, uint8_t *l2_size_v, int di, __time_t sec,
+		  uint8_t cpu_thread, uint16_t *ret_v,
+		  uint64_t *out_destroyed_packets_bitfld);
 
 int
 npf_packet_handler(npf_t *npf, struct mbuf **mp, uint8_t* mbuf_data_ptr,
