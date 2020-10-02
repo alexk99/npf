@@ -471,9 +471,6 @@ npf_packet_handler_vec(npf_t *npf, const uint8_t vec_size, struct mbuf **m_v,
 		 * Perform NAT.
 		 */
 		error_v[i] = npf_do_nat(npc, *con, di);
-		if (unlikely(error_v[i])) {
-			dprintf("do nat err: %d\n", error_v[i]);
-		}
 	}
 	step++;
 

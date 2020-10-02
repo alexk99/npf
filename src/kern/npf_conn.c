@@ -852,9 +852,7 @@ npf_conn_establish(npf_cache_t *npc, int di, bool per_if, npf_conn_t **out_con)
 	}
 
 	if (unlikely(!npf_conndb_insert(npf->conn_db, bk, key_nwords, con))) {
-		npf_conn_t *ret __diagused;
-		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords);
-		KASSERT(ret == con);
+		npf_conndb_remove(npf->conn_db, fw, key_nwords);
 		error = EISCONN;
 		NPF_DPRINTFCL(NPF_DC_ESTABL_CON, 30,
 				  "core %hhu: bk conndb insert failed\n", npc->cpu_thread);
@@ -945,7 +943,7 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 	npf_t *npf = npc->npc_ctx;
 	u_int key_nwords;
 	uint32_t *bk, *fw;
-	npf_conn_t *ret __diagused;
+	npf_conn_t *ret;
 	npf_addr_t *taddr, *oaddr;
 	in_port_t tport, oport;
 	u_int tidx;
@@ -968,11 +966,6 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 		fw = &con_ipv6->c_forw_entry.ck_key[0];
 		bk = &con_ipv6->c_back_entry.ck_key[0];
 		key_nwords = NPF_CONN_IPV6_KEYLEN_WORDS;
-	}
-
-	/* Construct a "backwards" key. */
-	if (!npf_conn_conkey(npc, bk, false)) {
-		return EINVAL;
 	}
 
 	/* Acquire the lock and check for the races. */
@@ -1012,7 +1005,8 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 
 	/* Remove the "backwards" entry. */
 	ret = npf_conndb_remove(npf->conn_db, bk, key_nwords);
-	KASSERT(ret == con);
+	if (unlikely(ret != con))
+		goto err;
 
 	/* Set the source/destination IDs to the translation values. */
 	connkey_set_addr(bk, taddr, tidx);
@@ -1033,19 +1027,12 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 		atomic_and_uint(&con->c_flags, ~CONN_PARTICIAL_HASH_COLLISION);
 
 	/* Finally, re-insert the "backwards" entry. */
-	if (!npf_conndb_insert(npf->conn_db, bk, key_nwords, con)) {
+	if (!npf_conndb_insert(npf->conn_db, bk, key_nwords, con))
 		/*
 		 * Race: we have hit the duplicate, remove the "forwards"
 		 * entry and expire our connection; it is no longer valid.
 		 */
-		ret = npf_conndb_remove(npf->conn_db, fw, key_nwords);
-		KASSERT(ret == con);
-
-		atomic_or_uint(&con->c_flags, CONN_REMOVED | CONN_EXPIRE);
-		npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_RACE_NAT);
-		npf_lock_exit(&con->c_lock);
-		return EISCONN;
-	}
+		goto err;
 
 	/* Associate the NAT entry and release the lock. */
 	con->c_nat = nt;
@@ -1065,6 +1052,14 @@ npf_conn_setnat(const npf_cache_t *npc, npf_conn_t *con,
 	}
 
 	return 0;
+
+err:
+	npf_conndb_remove(npf->conn_db, fw, key_nwords);
+	atomic_or_uint(&con->c_flags, CONN_REMOVED | CONN_EXPIRE);
+	npf_stats_inc(npc->npc_ctx, npc, NPF_STAT_RACE_NAT);
+	npf_lock_exit(&con->c_lock);
+	
+	return EISCONN;
 }
 
 /*
